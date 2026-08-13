@@ -10,3 +10,4 @@ ALTER TABLE player_state ADD COLUMN last_character_id TEXT;
 ALTER TABLE player_state ADD COLUMN last_game_type TEXT;
 
 UPDATE player_state SET current_pool_size=2 WHERE current_pool_size>2;
+UPDATE player_character_state SET status='hidden';
