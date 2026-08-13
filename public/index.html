@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>החבורה שלי</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="app">
+    <header><h1>✨ החבורה שלי</h1><button id="modeBtn" class="ghost">אזור הורה</button></header>
+
+    <section id="setup" class="card hidden">
+      <h2>מתחילים</h2>
+      <p>יוצרים משפחה ושחקן פעם אחת. המזהים נשמרים בדפדפן, והמצב עצמו נשמר בענן.</p>
+      <input id="familyName" placeholder="שם המשפחה" value="המשפחה שלי" />
+      <input id="playerName" placeholder="שם השחקן" value="שחקן" />
+      <button id="bootstrapBtn">צור משחק</button>
+    </section>
+
+    <section id="game" class="card hidden">
+      <div class="gameTop"><h2 id="prompt">מי כאן?</h2><button id="playAgain" class="ghost">🔊 שוב</button></div>
+      <div id="choices" class="choices"></div>
+      <div id="feedback" class="feedback"></div>
+      <button id="nextBtn" class="primary hidden">הבא 🎲</button>
+    </section>
+
+    <section id="crew" class="card hidden">
+      <h2>👥 החבורה שלי</h2>
+      <div id="crewGrid" class="crew"></div>
+    </section>
+
+    <section id="parent" class="card hidden">
+      <h2>אזור הורה</h2>
+      <form id="characterForm">
+        <label>שם<input name="name" required placeholder="למשל: אבי" /></label>
+        <label>תמונה ראשונה<input name="image1" type="file" accept="image/*" required /></label>
+        <label>תמונה שנייה<input name="image2" type="file" accept="image/*" required /></label>
+        <label>קול
+          <div class="audioRow">
+            <input name="audio" id="audioFile" type="file" accept="audio/*" required />
+            <button type="button" id="recordBtn" class="ghost">🎙️ הקלט</button>
+          </div>
+        </label>
+        <div id="recordStatus" class="muted"></div>
+        <button type="submit">הוסף לחבורה</button>
+      </form>
+      <div id="adminList" class="adminList"></div>
+    </section>
+  </main>
+<script src="/app.js" type="module"></script>
+</body>
+</html>
