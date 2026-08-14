@@ -22,8 +22,17 @@
   function showLogin(needsSetup){
     ensureModal();const body=$('#accessModalBody');
     if(needsSetup){
-      body.innerHTML=`<h2>יצירת מנהל ראשי</h2><p class="muted">פעולה חד־פעמית. קוד ההורה הישן נדרש רק כדי לאשר שאתה מנהל המערכת הקיימת.</p><div class="accessGrid"><input id="setupDisplay" placeholder="שם תצוגה"><input id="setupUser" autocomplete="username" placeholder="שם משתמש"><input id="setupPass" type="password" autocomplete="new-password" placeholder="סיסמה (לפחות 6 תווים)"><input id="setupPin" inputmode="numeric" placeholder="קוד ההורה הקיים"><button id="setupAdminBtn">צור ADMIN</button><button id="accessCancel" class="ghost">ביטול</button><div id="accessErr" class="accessError"></div></div>`;
-      $('#setupAdminBtn').onclick=async()=>{try{const d=await post('/api/auth/setup-admin',{familyId:localStorage.familyId,pin:$('#setupPin').value.trim(),username:$('#setupUser').value.trim(),displayName:$('#setupDisplay').value.trim(),password:$('#setupPass').value});authUser=d.user;hide($('#accessModal'));await openManagement();}catch(e){$('#accessErr').textContent=translateError(e.message);}};
+      body.innerHTML=`<h2>יצירת מנהל ראשי</h2><p class="muted">פעולה חד־פעמית. קוד ההורה הישן נדרש רק כדי לאשר שאתה מנהל המערכת הקיימת.</p><div class="accessGrid"><input id="setupDisplay" placeholder="שם תצוגה"><input id="setupUser" autocomplete="username" placeholder="שם משתמש"><input id="setupPass" type="password" autocomplete="new-password" placeholder="סיסמה (לפחות 6 תווים)"><input id="setupPin" inputmode="numeric" placeholder="קוד ההורה הקיים">${localStorage.playerId?'<input id="setupChildName" placeholder="שם הילד שכבר משחק במכשיר הזה">':''}<button id="setupAdminBtn">צור ADMIN</button><button id="accessCancel" class="ghost">ביטול</button><div id="accessErr" class="accessError"></div></div>`;
+      $('#setupAdminBtn').onclick=async()=>{
+        try{
+          const d=await post('/api/auth/setup-admin',{familyId:localStorage.familyId,pin:$('#setupPin').value.trim(),username:$('#setupUser').value.trim(),displayName:$('#setupDisplay').value.trim(),password:$('#setupPass').value});
+          authUser=d.user;
+          if(localStorage.playerId){
+            await post('/api/manage/adopt-player',{playerId:localStorage.playerId,displayName:$('#setupChildName')?.value.trim()||'הילד'}).catch(()=>{});
+          }
+          hide($('#accessModal'));await openManagement();
+        }catch(e){$('#accessErr').textContent=translateError(e.message);}
+      };
     }else{
       body.innerHTML=`<h2>כניסת הורה / מנהל</h2><div class="accessGrid"><input id="loginUser" autocomplete="username" placeholder="שם משתמש"><input id="loginPass" type="password" autocomplete="current-password" placeholder="סיסמה"><button id="loginBtn">כניסה</button><button id="accessCancel" class="ghost">ביטול</button><div id="accessErr" class="accessError"></div></div>`;
       $('#loginBtn').onclick=async()=>{try{const d=await post('/api/auth/login',{username:$('#loginUser').value.trim(),password:$('#loginPass').value});authUser=d.user;hide($('#accessModal'));await openManagement();}catch(e){$('#accessErr').textContent=translateError(e.message);}};
