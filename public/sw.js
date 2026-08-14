@@ -1,5 +1,5 @@
-const CACHE='crew-app-v1';
-const SHELL=['/','/styles.css','/v02.css','/app.js','/manifest.webmanifest','/app-icon.svg'];
+const CACHE='crew-app-v2';
+const SHELL=['/','/styles.css','/v02.css','/app.js','/game-mode-fix.js','/install.js','/manifest.webmanifest','/app-icon.svg'];
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)));
   self.skipWaiting();
@@ -18,7 +18,7 @@ self.addEventListener('fetch',event=>{
     }).catch(()=>caches.match('/')));
     return;
   }
-  event.respondWith(caches.match(event.request).then(cached=>cached||fetch(event.request).then(r=>{
+  event.respondWith(fetch(event.request).then(r=>{
     const copy=r.clone();caches.open(CACHE).then(c=>c.put(event.request,copy));return r;
-  })));
+  }).catch(()=>caches.match(event.request)));
 });
