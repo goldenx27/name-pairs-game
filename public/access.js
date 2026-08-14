@@ -15,6 +15,7 @@
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const hide=(el,on=true)=>el?.classList.toggle('hidden',on);
   const roleLabel=r=>r==='ADMIN'?'מנהל':r==='PARENT'?'הורה':'ילד';
+  const setTopButton=()=>{if($('#modeBtn'))$('#modeBtn').textContent=authUser?'יציאה':'🔒 ניהול';};
 
   function ensureModal(){if($('#accessModal'))return;document.body.insertAdjacentHTML('beforeend',`<div id="accessModal" class="accessModal hidden"><div class="accessCard"><div id="accessModalBody"></div></div></div>`);}
   async function status(){return api('/api/auth/status');}
@@ -35,18 +36,18 @@
   function ensurePanel(){
     if($('#accessPanel'))return;
     document.querySelector('main.app').insertAdjacentHTML('beforeend',`<section id="accessPanel" class="card hidden accessPanel">
-      <div class="accessTop"><div><h2>👥 ניהול משתמשים</h2><div id="signedUser" class="muted"></div></div><div class="accessActions"><button id="openMediaAdmin" class="ghost adminOnly">🖼️ תמונות וקולות</button><button id="logoutBtn" class="ghost">יציאה</button><button id="backToGame" class="ghost">חזרה למשחק</button></div></div>
+      <div class="accessTop"><div><h2>👥 ניהול משתמשים</h2><div id="signedUser" class="muted"></div></div><div class="accessActions"><button id="openMediaAdmin" class="ghost adminOnly">🖼️ תמונות וקולות</button></div></div>
       <details class="manageBox adminOnly"><summary>➕ יצירת הורה</summary><div class="manageBody"><div class="manageForm"><input id="newParentName" placeholder="שם תצוגה"><input id="newParentUser" placeholder="שם משתמש"><input id="newParentPass" type="password" placeholder="סיסמה"><input id="newFamilyName" placeholder="שם משפחה / קבוצה"><button id="createParentBtn" class="full">צור הורה</button></div></div></details>
       <details class="manageBox"><summary>➕ הוספת ילד</summary><div class="manageBody"><div class="manageForm"><input id="newChildName" placeholder="שם הילד"><input id="newChildUser" placeholder="מזהה פנימי (אופציונלי)"><select id="childParentSelect" class="adminOnly"><option value="">בחר הורה</option></select><button id="createChildBtn" class="full">הוסף ילד</button></div><div id="childCreateHint" class="muted"></div></div></details>
       <details class="manageBox adminOnly"><summary>👤 משתמשים פעילים</summary><div class="manageBody"><div id="userRows" class="userRows"></div></div></details>
       <details class="manageBox"><summary id="childrenTitle">👦 ילדים</summary><div class="manageBody"><div id="childRows" class="childRows"></div></div></details>
     </section>`);
-    $('#logoutBtn').onclick=logout;$('#backToGame').onclick=backToGame;$('#openMediaAdmin').onclick=openMediaAdmin;$('#createParentBtn').onclick=createParent;$('#createChildBtn').onclick=createChild;
+    $('#openMediaAdmin').onclick=openMediaAdmin;$('#createParentBtn').onclick=createParent;$('#createChildBtn').onclick=createChild;
   }
 
   function setRoleUi(){document.querySelectorAll('.adminOnly').forEach(el=>el.classList.toggle('hidden',authUser?.role!=='ADMIN'));$('#signedUser').textContent=`${authUser?.displayName||authUser?.username} · ${authUser?.role==='ADMIN'?'ADMIN':'הורה'}`;$('#childrenTitle').textContent=authUser?.role==='ADMIN'?'👦 כל הילדים':'👦 הילדים שלי';}
-  async function openManagement(){ensurePanel();setRoleUi();hide($('#game'));hide($('#crew'));hide($('#parent'));hide($('#setup'));hide($('#accessPanel'),false);$('#modeBtn').textContent='🔓 ניהול';await refreshManagement();}
-  function backToGame(){hide($('#accessPanel'));hide($('#parent'));if(localStorage.playerId){hide($('#game'),false);hide($('#crew'),false);}else hide($('#setup'),false);$('#modeBtn').textContent='🔒 אזור הורה';}
+  async function openManagement(){ensurePanel();setRoleUi();hide($('#game'));hide($('#crew'));hide($('#parent'));hide($('#setup'));hide($('#accessPanel'),false);setTopButton();await refreshManagement();}
+  function backToGame(){hide($('#accessPanel'));hide($('#parent'));window.clearProgressDashboard?.();if(localStorage.playerId){hide($('#game'),false);hide($('#crew'),false);}else hide($('#setup'),false);setTopButton();}
   async function logout(){await post('/api/auth/logout',{}).catch(()=>{});authUser=null;adminFamilies.clear();parentsCache=[];backToGame();}
 
   async function refreshManagement(){if(authUser.role==='ADMIN')await loadUsers();await loadChildren();}
@@ -61,8 +62,8 @@
   function parentSelectHtml(currentParentId){return `<select class="assignParent">${parentsCache.map(p=>`<option value="${p.id}" ${p.id===currentParentId?'selected':''}>${esc(p.display_name)}</option>`).join('')}</select>`;}
   async function loadChildren(){
     const children=await api('/api/manage/children');
-    $('#childRows').innerHTML=children.map(c=>`<div class="childRow" data-player="${c.player_id}"><div><b>${esc(c.display_name)}</b><br><small>${esc(c.username)}</small><div class="assignmentLine">${c.parent_name?`משויך ל: <b>${esc(c.parent_name)}</b>`:'לא משויך להורה'}${c.family_name?` · קבוצה: ${esc(c.family_name)}`:''}</div><div class="progressMini hidden"></div></div><div class="accessActions"><button class="playChild ghost">🎮 שחק</button><button class="showProgress ghost">📊 התקדמות</button>${authUser.role==='PARENT'?'<button class="removeChild ghost">הסר</button>':`${parentSelectHtml(c.parent_user_id)}<button class="assignChild ghost">שמור שיוך</button>`}</div></div>`).join('')||'<div class="muted">עדיין אין ילדים</div>';
-    document.querySelectorAll('.childRow').forEach(row=>{row.querySelector('.playChild').onclick=()=>activateChild(row.dataset.player);row.querySelector('.showProgress').onclick=()=>toggleProgress(row);row.querySelector('.removeChild')?.addEventListener('click',()=>removeChild(row.dataset.player));row.querySelector('.assignChild')?.addEventListener('click',()=>assignChild(row));});
+    $('#childRows').innerHTML=children.map(c=>`<div class="childRow" data-player="${c.player_id}" data-name="${esc(c.display_name)}"><div><b>${esc(c.display_name)}</b><br><small>${esc(c.username)}</small><div class="assignmentLine">${c.parent_name?`משויך ל: <b>${esc(c.parent_name)}</b>`:'לא משויך להורה'}${c.family_name?` · קבוצה: ${esc(c.family_name)}`:''}</div><div class="progressMini hidden"></div></div><div class="accessActions"><button class="playChild ghost">🎮 שחק</button><button class="showProgress ghost">📊 התקדמות</button>${authUser.role==='PARENT'?'<button class="removeChild ghost">הסר</button>':`${parentSelectHtml(c.parent_user_id)}<button class="assignChild ghost">שמור שיוך</button>`}</div></div>`).join('')||'<div class="muted">עדיין אין ילדים</div>';
+    document.querySelectorAll('.childRow').forEach(row=>{row.querySelector('.playChild').onclick=()=>activateChild(row.dataset.player);row.querySelector('.showProgress').onclick=()=>showChildProgress(row);row.querySelector('.removeChild')?.addEventListener('click',()=>removeChild(row.dataset.player));row.querySelector('.assignChild')?.addEventListener('click',()=>assignChild(row));});
   }
 
   async function createParent(){try{const d=await post('/api/manage/parents',{displayName:$('#newParentName').value.trim(),username:$('#newParentUser').value.trim(),password:$('#newParentPass').value,familyName:$('#newFamilyName').value.trim()});$('#newParentName').value=$('#newParentUser').value=$('#newParentPass').value=$('#newFamilyName').value='';await loadUsers();$('#childParentSelect').value=d.parent.id;$('#childCreateHint').textContent='ההורה נוצר. אפשר להוסיף לו ילד.';}catch(e){alert(translateError(e.message));}}
@@ -70,7 +71,17 @@
   async function assignChild(row){const parentId=row.querySelector('.assignParent').value;if(!parentId)return alert('בחר הורה');try{await post('/api/manage/assign-child',{parentUserId:parentId,playerId:row.dataset.player});await loadChildren();alert('השיוך עודכן');}catch(e){alert(translateError(e.message));}}
   async function deleteUser(userId,name){if(!confirm(`להסיר את ${name}? המשתמש יושבת, והיסטוריית ילד לא תימחק.`))return;try{await api(`/api/manage/users/${userId}`,{method:'DELETE'});await refreshManagement();}catch(e){alert(translateError(e.message));}}
   async function activateChild(playerId){const d=await post('/api/manage/activate-child',{playerId});localStorage.playerId=d.player.id;localStorage.familyId=d.player.family_id;location.reload();}
-  async function toggleProgress(row){const panel=row.querySelector('.progressMini');if(!panel.classList.contains('hidden')){panel.classList.add('hidden');return;}panel.textContent='טוען…';panel.classList.remove('hidden');try{const d=await api(`/api/manage/children/${row.dataset.player}/progress`);const chars=d.characters.filter(c=>c.status!=='hidden');panel.innerHTML=chars.length?chars.map(c=>{const total=Number(c.correct_count||0)+Number(c.wrong_count||0),pct=total?Math.round(Number(c.correct_count||0)*100/total):0;return `<div class="progressMiniRow"><span>${esc(c.name)}</span><div class="progressTrack"><div class="progressFill" style="width:${pct}%"></div></div><b>${pct}%</b></div>`}).join(''):'<span class="muted">עדיין אין מספיק נתוני משחק</span>';}catch(e){panel.textContent=translateError(e.message);}}
+  async function showChildProgress(row){
+    if(!window.renderProgressDashboard)return;
+    hide($('#accessPanel'));hide($('#game'));hide($('#crew'));hide($('#setup'));hide($('#parent'),false);
+    $('#parent h2').textContent=`📊 התקדמות — ${row.dataset.name}`;
+    $('#closeParent').textContent='👥 משתמשים';
+    $('#closeParent').onclick=()=>openManagement();
+    document.querySelectorAll('#parent > :not(.sectionTitle):not(#progressPanel)').forEach(el=>el.classList.add('adminMediaHidden'));
+    $('#progressPanel').classList.remove('adminMediaHidden');
+    setTopButton();
+    await window.renderProgressDashboard(row.dataset.player,row.dataset.name);
+  }
   async function removeChild(playerId){if(!confirm('להסיר את הילד מרשימת הילדים שלך? ההתקדמות לא תימחק.'))return;await api(`/api/manage/parents/${authUser.id}/children/${playerId}`,{method:'DELETE'});await loadChildren();}
 
   async function loadMediaList(){const chars=await api('/api/characters');$('#adminList').innerHTML=chars.map(c=>`<div class="adminItem" data-id="${c.id}"><img src="${c.image1}" alt=""><b>${esc(c.name)}</b><div class="adminBtns"><button class="mediaEdit ghost">✏️ ערוך</button><button class="mediaDelete danger">🗑️ מחק</button></div></div>`).join('');document.querySelectorAll('#adminList .adminItem').forEach(el=>{const c=chars.find(x=>x.id===el.dataset.id);el.querySelector('.mediaEdit').onclick=()=>startMediaEdit(c);el.querySelector('.mediaDelete').onclick=()=>deleteMedia(c);});}
@@ -79,8 +90,19 @@
   async function mediaSubmit(e){e.preventDefault();const fd=new FormData(e.currentTarget);const btn=$('#saveCharacterBtn');btn.disabled=true;try{if(mediaEditId)await api(`/api/characters/${mediaEditId}`,{method:'PATCH',body:fd});else await api('/api/characters',{method:'POST',body:fd});resetMediaForm();await loadMediaList();}catch(err){alert(translateError(err.message));}finally{btn.disabled=false;}}
   async function deleteMedia(c){if(!confirm(`למחוק את ${c.name} מהמאגר הגלובלי?`))return;try{await api(`/api/characters/${c.id}`,{method:'DELETE',headers:{'content-type':'application/json'},body:'{}'});await loadMediaList();}catch(e){alert(translateError(e.message));}}
   async function resetActiveChild(){if(!localStorage.playerId)return alert('בחר קודם ילד דרך ניהול המשתמשים');if(!confirm('לאפס את ההתקדמות של הילד הפעיל?'))return;try{await post(`/api/players/${localStorage.playerId}/reset`,{});alert('ההתקדמות אופסה');}catch(e){alert(translateError(e.message));}}
-  async function openMediaAdmin(){if(authUser?.role!=='ADMIN')return;hide($('#accessPanel'));hide($('#game'));hide($('#crew'));hide($('#setup'));hide($('#parent'),false);$('#modeBtn').textContent='🔓 ADMIN';$('#closeParent').onclick=()=>openManagement();$('#characterForm').onsubmit=mediaSubmit;$('#cancelEditBtn').onclick=resetMediaForm;$('#resetProgressBtn').onclick=resetActiveChild;await loadMediaList();}
+  async function openMediaAdmin(){
+    if(authUser?.role!=='ADMIN')return;
+    hide($('#accessPanel'));hide($('#game'));hide($('#crew'));hide($('#setup'));hide($('#parent'),false);
+    $('#parent h2').textContent='🖼️ תמונות וקולות';
+    $('#closeParent').textContent='👥 משתמשים';
+    $('#closeParent').onclick=()=>openManagement();
+    document.querySelectorAll('#parent > *').forEach(el=>el.classList.remove('adminMediaHidden'));
+    $('#progressPanel').classList.add('adminMediaHidden');
+    $('#characterForm').onsubmit=mediaSubmit;$('#cancelEditBtn').onclick=resetMediaForm;$('#resetProgressBtn').onclick=resetActiveChild;
+    setTopButton();await loadMediaList();
+  }
 
   async function openAccess(){try{const s=await status();authUser=s.user||null;if(authUser)return openManagement();showLogin(s.needsAdminSetup);}catch(e){alert(e.message);}}
-  window.addEventListener('DOMContentLoaded',()=>{ensureModal();ensurePanel();$('#modeBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();openAccess();},true);});
+  async function handleTopButton(){if(authUser)return logout();return openAccess();}
+  window.addEventListener('DOMContentLoaded',()=>{ensureModal();ensurePanel();setTopButton();$('#modeBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();handleTopButton();},true);});
 })();
