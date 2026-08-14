@@ -1,7 +1,7 @@
-const CACHE = 'crew-app-v14';
+const CACHE = 'crew-app-v15';
 const SHELL = [
   '/', '/styles.css', '/v02.css', '/progress.css', '/storage-audit.css', '/access.css',
-  '/app.js', '/game-mode-fix.js', '/progress.js', '/storage-audit.js', '/active-child.js',
+  '/app.js', '/game-mode-fix.js', '/reset-sync.js', '/progress.js', '/storage-audit.js', '/active-child.js',
   '/session-guard.js', '/install.js', '/manifest.webmanifest', '/app-icon-192.png', '/app-icon-512.png'
 ];
 self.addEventListener('install', event => { event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL))); self.skipWaiting(); });
