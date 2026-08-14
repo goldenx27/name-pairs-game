@@ -9,13 +9,10 @@
   };
 
   async function call(path, extra = {}) {
-    const familyId = localStorage.familyId;
-    const parentPin = $('#parentPinInput')?.value?.trim();
-    if (!familyId || !parentPin) throw new Error('פתח קודם את אזור ההורה עם הקוד');
     const r = await fetch(path, {
-      method: 'POST',
+      method: 'POST', credentials:'same-origin',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ familyId, parentPin, ...extra })
+      body: JSON.stringify(extra)
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'request_failed');
@@ -47,7 +44,7 @@
     btn.disabled = true;
     $('#storageAuditResult').textContent = 'בודק את D1 מול R2…';
     try { render(await call('/api/storage/audit')); }
-    catch (e) { $('#storageAuditResult').textContent = `לא ניתן לבדוק: ${e.message}`; }
+    catch (e) { $('#storageAuditResult').textContent = e.message==='unauthorized'?'יש להתחבר כ־ADMIN':`לא ניתן לבדוק: ${e.message}`; }
     finally { btn.disabled = false; }
   }
 
