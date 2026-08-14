@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "name-pairs-game",
-  "main": "src/index.js",
+  "main": "src/main.js",
   "compatibility_date": "2026-08-13",
   "assets": {
     "directory": "./public",
