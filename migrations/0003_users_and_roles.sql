@@ -1,16 +1,15 @@
--- RBAC foundation: SUPER_ADMIN / FAMILY_ADMIN / PARENT / CHILD
+-- RBAC foundation: ADMIN / PARENT / CHILD
 -- Existing `players` remain child profiles so current progress is preserved.
+-- Managers and parents authenticate with username + password only.
 
 CREATE TABLE IF NOT EXISTS app_users (
   id TEXT PRIMARY KEY,
-  email TEXT UNIQUE,
-  username TEXT UNIQUE,
+  username TEXT NOT NULL UNIQUE,
   display_name TEXT NOT NULL,
   global_role TEXT NOT NULL DEFAULT 'PARENT'
-    CHECK (global_role IN ('SUPER_ADMIN','FAMILY_ADMIN','PARENT','CHILD')),
+    CHECK (global_role IN ('ADMIN','PARENT','CHILD')),
   password_hash TEXT,
   password_salt TEXT,
-  pin_hash TEXT,
   active INTEGER NOT NULL DEFAULT 1,
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -18,11 +17,11 @@ CREATE TABLE IF NOT EXISTS app_users (
   FOREIGN KEY (created_by) REFERENCES app_users(id) ON DELETE SET NULL
 );
 
--- A user can belong to one or more families. The role here controls the family scope.
+-- Families are grouping/scope only; there is no family-admin role.
 CREATE TABLE IF NOT EXISTS family_memberships (
   family_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('FAMILY_ADMIN','PARENT','CHILD')),
+  role TEXT NOT NULL CHECK (role IN ('PARENT','CHILD')),
   active INTEGER NOT NULL DEFAULT 1,
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -43,7 +42,7 @@ CREATE TABLE IF NOT EXISTS child_accounts (
   FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE CASCADE
 );
 
--- Explicit parent/child relationship. SUPER_ADMIN bypasses this table.
+-- Explicit parent/child relationship. ADMIN bypasses this table and can see all children.
 CREATE TABLE IF NOT EXISTS parent_children (
   parent_user_id TEXT NOT NULL,
   child_player_id TEXT NOT NULL,
