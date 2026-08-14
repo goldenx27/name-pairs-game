@@ -1,4 +1,4 @@
-const CACHE = 'crew-app-v10';
+const CACHE = 'crew-app-v11';
 const SHELL = [
   '/',
   '/styles.css',
@@ -11,6 +11,7 @@ const SHELL = [
   '/progress.js',
   '/storage-audit.js',
   '/access.js',
+  '/active-child.js',
   '/install.js',
   '/manifest.webmanifest',
   '/app-icon-192.png',
