@@ -1,8 +1,12 @@
 (() => {
   const $ = s => document.querySelector(s);
+  let observer = null;
 
   function showLockedGame() {
-    if (localStorage.playerId) return;
+    if (localStorage.playerId) {
+      $('#noActiveChild')?.classList.add('hidden');
+      return;
+    }
 
     $('#setup')?.classList.add('hidden');
     $('#game')?.classList.add('hidden');
@@ -30,10 +34,11 @@
       const btn = row.querySelector('.playChild');
       if (!btn) return;
       const isActive = !!localStorage.playerId && row.dataset.player === localStorage.playerId;
-      btn.textContent = isActive ? '⏸️ השבת' : '🎮 הפוך לפעיל';
-      btn.classList.toggle('danger', isActive);
-      btn.classList.toggle('ghost', !isActive);
-      row.classList.toggle('activeChildRow', isActive);
+      const wantedText = isActive ? '⏸️ השבת' : '🎮 הפוך לפעיל';
+      if (btn.textContent !== wantedText) btn.textContent = wantedText;
+      if (btn.classList.contains('danger') !== isActive) btn.classList.toggle('danger', isActive);
+      if (btn.classList.contains('ghost') === isActive) btn.classList.toggle('ghost', !isActive);
+      if (row.classList.contains('activeChildRow') !== isActive) row.classList.toggle('activeChildRow', isActive);
 
       const name = row.querySelector('b');
       if (name) {
@@ -42,6 +47,16 @@
         if (!isActive && existing) existing.remove();
       }
     });
+  }
+
+  function watchChildRows() {
+    observer?.disconnect();
+    const rows = $('#childRows');
+    if (!rows) return;
+    observer = new MutationObserver(() => syncChildButtons());
+    // Only watch replacement/addition of direct child rows. Watching the whole
+    // subtree caused our own button text/class updates to retrigger forever.
+    observer.observe(rows, {childList:true});
   }
 
   document.addEventListener('click', e => {
@@ -54,17 +69,14 @@
       e.preventDefault();
       e.stopImmediatePropagation();
       localStorage.removeItem('playerId');
+      localStorage.removeItem('familyId');
       location.reload();
     }
   }, true);
 
-  const observer = new MutationObserver(() => syncChildButtons());
-
   window.addEventListener('DOMContentLoaded', () => {
-    if (!localStorage.playerId) showLockedGame();
+    showLockedGame();
     syncChildButtons();
-    const rows = $('#childRows');
-    if (rows) observer.observe(rows, {childList:true, subtree:true});
-    else observer.observe(document.body, {childList:true, subtree:true});
+    watchChildRows();
   });
 })();
