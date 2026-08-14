@@ -31,7 +31,7 @@
     refreshAvailability();
   }
   async function refreshAvailability(){
-    try{items=await fetch('/api/speech-items').then(r=>r.ok?r.json():[]);$('#letterPracticeBtn')?.classList.toggle('hidden',!items.length||!playerId());}catch{}
+    try{items=await fetch('/api/speech-items',{cache:'no-store'}).then(r=>r.ok?r.json():[]);$('#letterPracticeBtn')?.classList.toggle('hidden',!items.length||!playerId());}catch{}
   }
   async function startGame(){
     if(!playerId())return;
@@ -46,7 +46,7 @@
     refreshAvailability();
   }
   function current(){return items[index%items.length];}
-  function playPrompt(){const i=current();if(i)new Audio(i.promptAudio+'?v='+(i.updated_at||i.created_at||'1')).play().catch(()=>{});}
+  function playPrompt(){const i=current();if(i)new Audio(i.promptAudio).play().catch(()=>{});}
   function renderItem(message=''){
     const i=current();if(!i)return stopGame();
     $('#letterStage').innerHTML=`<div class="letterPicture"><img src="${i.image}" alt=""></div><div class="letterTarget">הקשב ואז חזור רק על הצליל <strong>${i.target_text||i.targetText}</strong></div><div class="letterActions"><button id="letterListen" class="ghost">🔊 שמע שוב</button><button id="letterRecord" class="primary">🎤 הקלט</button></div><div id="letterStatus" class="letterStatus">${message}</div><div class="letterAttempts">ניסיון ${attemptNo} מתוך 3</div>`;
@@ -60,8 +60,6 @@
       recorderCtl=await recordOnce({onStart:()=>{btn.textContent='⏹️ סיים';status.textContent='מקליט… אמור רק את הצליל';}});
       const blob=await recorderCtl.done;recorderCtl=null;btn.textContent='🎤 הקלט';status.textContent='שומר את הניסיון…';
       const result=await uploadAttempt({itemId:current().id,playerId:playerId(),attemptNo,blob});
-      // Evaluation is deliberately not guessed in-browser. Until phoneme scoring is connected,
-      // the child can practice up to three times and every recording is kept for later evaluation.
       if(result.evaluation?.status==='correct')return finishAttempt(true);
       if(result.evaluation?.status==='wrong')return finishAttempt(false);
       status.innerHTML=`ההקלטה נשמרה ✅ <div class="letterManual"><button id="letterAgain" class="ghost">🔁 נסה שוב</button><button id="letterNext" class="primary">הבא</button></div>`;
@@ -74,6 +72,7 @@
     else{nextItem();}
   }
   function nextItem(){attemptNo=1;index=(index+1)%items.length;renderItem();}
+  document.addEventListener('click',e=>{if(running&&e.target.closest?.('#modeBtn'))stopGame();},true);
   window.SpeechPractice={supported,recordOnce,uploadAttempt,startGame,refreshAvailability};
   window.addEventListener('DOMContentLoaded',ensureUi);
 })();
