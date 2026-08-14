@@ -105,6 +105,23 @@ async function handleReset(request,env,url){
 }
 
 async function handleManagementExtras(request,env,url){
+  if(request.method==='POST'&&url.pathname==='/api/manage/adopt-player'){
+    const auth=await requireRole(request,env,['ADMIN']);if(auth.error)return auth.error;
+    const b=await request.json().catch(()=>({}));
+    const player=await env.DB.prepare(`SELECT id,family_id,name FROM players WHERE id=?`).bind(b.playerId).first();
+    if(!player)return json({error:'player_not_found'},404);
+    const existing=await env.DB.prepare(`SELECT ca.user_id,au.display_name FROM child_accounts ca JOIN app_users au ON au.id=ca.user_id WHERE ca.player_id=?`).bind(player.id).first();
+    if(existing)return json({ok:true,alreadyAdopted:true,userId:existing.user_id,displayName:existing.display_name});
+    const userId=id('user'),username=`child_${crypto.randomUUID().slice(0,8)}`,displayName=String(b.displayName||player.name||'ילד').trim();
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO app_users(id,username,display_name,global_role,created_by) VALUES(?,?,?,'CHILD',?)`).bind(userId,username,displayName,auth.user.id),
+      env.DB.prepare(`INSERT INTO child_accounts(user_id,player_id,family_id) VALUES(?,?,?)`).bind(userId,player.id,player.family_id),
+      env.DB.prepare(`INSERT OR IGNORE INTO family_memberships(family_id,user_id,role,created_by) VALUES(?,?,'CHILD',?)`).bind(player.family_id,userId,auth.user.id),
+      env.DB.prepare(`UPDATE players SET name=? WHERE id=?`).bind(displayName,player.id)
+    ]);
+    return json({ok:true,userId,playerId:player.id,displayName});
+  }
+
   if(request.method==='GET'&&url.pathname==='/api/manage/parents'){
     const auth=await requireRole(request,env,['ADMIN']);if(auth.error)return auth.error;
     const rows=await env.DB.prepare(`
