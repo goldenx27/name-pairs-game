@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "npm run db:remote && wrangler deploy",
+    "icons": "node scripts/generate-icons.mjs",
+    "deploy": "npm run icons && npm run db:remote && wrangler deploy",
     "db:local": "wrangler d1 migrations apply name-pairs-db --local",
     "db:remote": "wrangler d1 migrations apply name-pairs-db --remote"
   },
