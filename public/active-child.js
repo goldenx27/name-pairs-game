@@ -10,12 +10,8 @@
     if (!chip) {
       chip = document.createElement('span');
       chip.id = 'activeChildTopChip';
-      chip.className = 'ghost hidden';
-      chip.style.display = 'inline-flex';
-      chip.style.alignItems = 'center';
-      chip.style.gap = '6px';
-      chip.style.whiteSpace = 'nowrap';
-      chip.style.pointerEvents = 'none';
+      chip.className = 'activeChildTopChip hidden';
+      chip.setAttribute('aria-label', 'הילד הפעיל');
       headerActions.insertBefore(chip, $('#modeBtn') || null);
     }
     return chip;
