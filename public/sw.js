@@ -1,4 +1,4 @@
-const CACHE = 'crew-app-v5';
+const CACHE = 'crew-app-v6';
 const SHELL = [
   '/',
   '/styles.css',
