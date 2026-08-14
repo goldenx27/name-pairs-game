@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="/v02.css" />
   <link rel="stylesheet" href="/progress.css" />
   <link rel="stylesheet" href="/storage-audit.css" />
+  <link rel="stylesheet" href="/access.css" />
 </head>
 <body>
   <main class="app">
@@ -23,7 +24,7 @@
     <section id="setup" class="card hidden"><h2>מתחילים 🎮</h2><p>בחרו קוד הורה בן 4–6 ספרות. זה הדבר היחיד שצריך להגדיר.</p><input id="newPin" inputmode="numeric" maxlength="6" placeholder="קוד הורה" /><button id="bootstrapBtn" class="primary">התחל משחק</button></section>
     <section id="game" class="card hidden"><div class="gameTop"><h2 id="prompt">מי כאן?</h2><button id="playAgain" class="ghost hidden">🔊 שוב</button></div><div id="gameStage"></div><div id="feedback" class="feedback"></div><button id="nextBtn" class="primary hidden">הבא 🎲</button></section>
     <section id="crew" class="card hidden"><div class="sectionTitle"><h2>👥 החבורה הגדולה</h2><span id="crewProgress" class="pill"></span></div><div id="crewGrid" class="crew"></div></section>
-    <section id="parent" class="card hidden"><div class="sectionTitle"><h2>🔐 אזור הורה</h2><button id="closeParent" class="ghost">חזרה למשחק</button></div><p class="muted">הדמויות כאן הן חלק מהמאגר הגלובלי ויופיעו לכל שחקן חדש.</p><div id="progressPanel" class="progressPanel"></div><div class="storageAudit"><h3>🗄️ בדיקת אחסון R2</h3><p class="muted">בודק שכל שתי התמונות והקול של כל דמות קיימים, ומאתר קבצים שכבר אינם משויכים לשום דמות.</p><div class="storageActions"><button type="button" id="auditStorageBtn" class="ghost">בדוק עכשיו</button><button type="button" id="cleanupStorageBtn" class="danger hidden">מחק קבצים מיותרים</button></div><div id="storageAuditResult"></div></div><form id="characterForm"><input type="hidden" id="editCharacterId" /><label>שם<input id="characterName" name="name" required placeholder="למשל: אבי" /></label><label>תמונה ראשונה<input id="image1" name="image1" type="file" accept="image/*" /></label><label>תמונה שנייה<input id="image2" name="image2" type="file" accept="image/*" /></label><label>קול<div class="audioRow"><input name="audio" id="audioFile" type="file" accept="audio/*" /><button type="button" id="recordBtn" class="ghost">🎙️ הקלט</button></div></label><div id="recordStatus" class="muted"></div><div class="formActions"><button type="submit" id="saveCharacterBtn">הוסף לחבורה</button><button type="button" id="cancelEditBtn" class="ghost hidden">בטל עריכה</button></div></form><div class="dangerZone"><button id="resetProgressBtn" class="danger">🔄 אפס התקדמות והתחל מהתחלה</button></div><div id="adminList" class="adminList"></div></section>
+    <section id="parent" class="card hidden"><div class="sectionTitle"><h2>🔐 ADMIN</h2><button id="closeParent" class="ghost">חזרה למשחק</button></div><p class="muted">ניהול המאגר הגלובלי — תמונות, קולות, D1 ו־R2.</p><div id="progressPanel" class="progressPanel"></div><div class="storageAudit"><h3>🗄️ בדיקת אחסון R2</h3><p class="muted">בודק שכל שתי התמונות והקול של כל דמות קיימים, ומאתר קבצים שכבר אינם משויכים לשום דמות.</p><div class="storageActions"><button type="button" id="auditStorageBtn" class="ghost">בדוק עכשיו</button><button type="button" id="cleanupStorageBtn" class="danger hidden">מחק קבצים מיותרים</button></div><div id="storageAuditResult"></div></div><form id="characterForm"><input type="hidden" id="editCharacterId" /><label>שם<input id="characterName" name="name" required placeholder="למשל: אבי" /></label><label>תמונה ראשונה<input id="image1" name="image1" type="file" accept="image/*" /></label><label>תמונה שנייה<input id="image2" name="image2" type="file" accept="image/*" /></label><label>קול<div class="audioRow"><input name="audio" id="audioFile" type="file" accept="audio/*" /><button type="button" id="recordBtn" class="ghost">🎙️ הקלט</button></div></label><div id="recordStatus" class="muted"></div><div class="formActions"><button type="submit" id="saveCharacterBtn">הוסף לחבורה</button><button type="button" id="cancelEditBtn" class="ghost hidden">בטל עריכה</button></div></form><div class="dangerZone"><button id="resetProgressBtn" class="danger">🔄 אפס התקדמות לילד הפעיל</button></div><div id="adminList" class="adminList"></div></section>
   </main>
   <div id="pinModal" class="modal hidden"><div class="modalCard"><h2 id="pinTitle">קוד הורה</h2><p id="pinText" class="muted"></p><input id="parentPinInput" inputmode="numeric" maxlength="6" placeholder="••••" /><div class="formActions"><button id="pinConfirmBtn">אישור</button><button id="pinCancelBtn" class="ghost">ביטול</button></div><div id="pinError" class="errorText"></div></div></div>
 <script src="/game-mode-fix.js"></script>
@@ -31,6 +32,7 @@
 <script src="/progress.js"></script>
 <script src="/storage-audit.js"></script>
 <script src="/install.js"></script>
+<script src="/access.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
