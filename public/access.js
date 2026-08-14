@@ -32,7 +32,16 @@
   function setRoleUi(){document.querySelectorAll('.adminOnly').forEach(el=>el.classList.toggle('hidden',authUser?.role!=='ADMIN'));$('#signedUser').textContent=`${authUser?.displayName||authUser?.username} · ${authUser?.role==='ADMIN'?'ADMIN':'הורה'}`;$('#childrenTitle').textContent=authUser?.role==='ADMIN'?'👦 כל הילדים':'👦 הילדים שלי';}
   async function openManagement(){ensurePanel();setRoleUi();hide($('#noActiveChild'));hide($('#game'));hide($('#crew'));hide($('#parent'));hide($('#setup'));hide($('#accessPanel'),false);setTopButton();await refreshManagement();}
   function backToGame(){hide($('#accessPanel'));hide($('#parent'));window.clearProgressDashboard?.();if(localStorage.playerId){hide($('#noActiveChild'));hide($('#game'),false);hide($('#crew'),false);}else{hide($('#setup'));hide($('#game'));hide($('#crew'));window.showActiveChildLock?.();}setTopButton();}
-  async function logout(){await post('/api/auth/logout',{}).catch(()=>{});authUser=null;adminFamilies.clear();parentsCache=[];backToGame();}
+  async function logout(){
+    await post('/api/auth/logout',{}).catch(()=>{});
+    authUser=null;adminFamilies.clear();parentsCache=[];
+    if(localStorage.getItem('crewPlayerSwitchPending')==='1'){
+      localStorage.removeItem('crewPlayerSwitchPending');
+      location.reload();
+      return;
+    }
+    backToGame();
+  }
 
   async function refreshManagement(){if(authUser.role==='ADMIN')await loadUsers();await loadChildren();}
   function userRow(u){return `<div class="userRow"><div><b>${esc(u.display_name)}</b><br><small>${esc(u.username)}</small></div><div class="userActions"><span class="roleBadge">${roleLabel(u.global_role)}</span>${u.id!==authUser.id?`<button class="deleteUser danger" data-id="${u.id}" data-name="${esc(u.display_name)}">מחק</button>`:''}</div></div>`;}
@@ -45,7 +54,16 @@
   async function createChild(){const body={displayName:$('#newChildName').value.trim(),username:$('#newChildUser').value.trim()||undefined};if(!body.displayName)return alert('הכנס שם לילד');if(authUser.role==='ADMIN'){const parentId=$('#childParentSelect').value;if(!parentId)return alert('בחר הורה שאליו הילד ישויך');body.parentUserId=parentId;body.familyId=adminFamilies.get(parentId);}try{await post('/api/manage/children',body);$('#newChildName').value=$('#newChildUser').value='';await refreshManagement();}catch(e){alert(translateError(e.message));}}
   async function assignChild(row){const parentId=row.querySelector('.assignParent').value;if(!parentId)return alert('בחר הורה');try{await post('/api/manage/assign-child',{parentUserId:parentId,playerId:row.dataset.player});await loadChildren();alert('השיוך עודכן');}catch(e){alert(translateError(e.message));}}
   async function deleteUser(userId,name){if(!confirm(`להסיר את ${name}? המשתמש יושבת, והיסטוריית ילד לא תימחק.`))return;try{await api(`/api/manage/users/${userId}`,{method:'DELETE'});await refreshManagement();}catch(e){alert(translateError(e.message));}}
-  async function activateChild(playerId){try{const d=await post('/api/manage/activate-child',{playerId});localStorage.playerId=d.player.id;localStorage.familyId=d.player.family_id;await loadChildren();}catch(e){alert(translateError(e.message));}}
+  async function activateChild(playerId){
+    try{
+      const previousPlayerId=localStorage.playerId||'';
+      const d=await post('/api/manage/activate-child',{playerId});
+      localStorage.playerId=d.player.id;
+      localStorage.familyId=d.player.family_id;
+      if(previousPlayerId!==d.player.id)localStorage.setItem('crewPlayerSwitchPending','1');
+      await loadChildren();
+    }catch(e){alert(translateError(e.message));}
+  }
   async function showChildProgress(row){if(!window.renderProgressDashboard)return;hide($('#accessPanel'));hide($('#game'));hide($('#crew'));hide($('#setup'));hide($('#parent'),false);$('#parent h2').textContent=`📊 התקדמות — ${row.dataset.name}`;$('#closeParent').textContent='👥 משתמשים';$('#closeParent').onclick=()=>openManagement();document.querySelectorAll('#parent > :not(.adminSectionTop):not(#progressPanel)').forEach(el=>el.classList.add('adminMediaHidden'));$('#progressPanel').classList.remove('adminMediaHidden');setTopButton();await window.renderProgressDashboard(row.dataset.player,row.dataset.name);}
   async function removeChild(playerId){if(!confirm('להסיר את הילד מרשימת הילדים שלך? ההתקדמות לא תימחק.'))return;await api(`/api/manage/parents/${authUser.id}/children/${playerId}`,{method:'DELETE'});await loadChildren();}
 
