@@ -1,4 +1,4 @@
-const CACHE = 'crew-app-v6';
+const CACHE = 'crew-app-v7';
 const SHELL = [
   '/',
   '/styles.css',
@@ -23,9 +23,7 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
-  );
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))));
   self.clients.claim();
 });
 
@@ -35,23 +33,17 @@ self.addEventListener('fetch', event => {
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/media/')) return;
 
   if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request)
-        .then(response => {
-          const copy = response.clone();
-          caches.open(CACHE).then(cache => cache.put('/', copy));
-          return response;
-        })
-        .catch(() => caches.match('/'))
-    );
+    event.respondWith(fetch(event.request).then(response => {
+      const copy = response.clone();
+      caches.open(CACHE).then(cache => cache.put('/', copy));
+      return response;
+    }).catch(() => caches.match('/')));
     return;
   }
 
-  event.respondWith(
-    fetch(event.request).then(response => {
-      const copy=response.clone();
-      caches.open(CACHE).then(cache=>cache.put(event.request,copy));
-      return response;
-    }).catch(()=>caches.match(event.request))
-  );
+  event.respondWith(fetch(event.request).then(response => {
+    const copy=response.clone();
+    caches.open(CACHE).then(cache=>cache.put(event.request,copy));
+    return response;
+  }).catch(()=>caches.match(event.request)));
 });
