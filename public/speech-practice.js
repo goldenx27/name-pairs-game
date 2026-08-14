@@ -49,7 +49,7 @@
   function playPrompt(){const i=current();if(i)new Audio(i.promptAudio).play().catch(()=>{});}
   function renderItem(message=''){
     const i=current();if(!i)return stopGame();
-    $('#letterStage').innerHTML=`<div class="letterPicture"><img src="${i.image}" alt=""></div><div class="letterTarget">הקשב ואז חזור רק על הצליל <strong>${i.target_text||i.targetText}</strong></div><div class="letterActions"><button id="letterListen" class="ghost">🔊 שמע שוב</button><button id="letterRecord" class="primary">🎤 הקלט</button></div><div id="letterStatus" class="letterStatus">${message}</div><div class="letterAttempts">ניסיון ${attemptNo} מתוך 3</div>`;
+    $('#letterStage').innerHTML=`<div class="letterPicture"><img src="${i.image}" alt=""></div><div class="letterTarget">הקשב ואז חזור רק על הצליל <strong>${i.target_text||i.targetText}</strong></div><div class="letterHint">כדאי לומר את הצליל ברור למשך כחצי שנייה.</div><div class="letterActions"><button id="letterListen" class="ghost">🔊 שמע שוב</button><button id="letterRecord" class="primary">🎤 הקלט</button></div><div id="letterStatus" class="letterStatus">${message}</div><div class="letterAttempts">ניסיון ${attemptNo} מתוך 3</div>`;
     $('#letterListen').onclick=playPrompt;$('#letterRecord').onclick=toggleRecord;
     setTimeout(playPrompt,250);
   }
@@ -58,18 +58,25 @@
     if(recorderCtl){recorderCtl.stop();return;}
     try{
       recorderCtl=await recordOnce({onStart:()=>{btn.textContent='⏹️ סיים';status.textContent='מקליט… אמור רק את הצליל';}});
-      const blob=await recorderCtl.done;recorderCtl=null;btn.textContent='🎤 הקלט';status.textContent='שומר את הניסיון…';
+      const blob=await recorderCtl.done;recorderCtl=null;btn.textContent='🎤 הקלט';status.textContent='בודק את ההקלטה…';
       const result=await uploadAttempt({itemId:current().id,playerId:playerId(),attemptNo,blob});
-      if(result.evaluation?.status==='correct')return finishAttempt(true);
-      if(result.evaluation?.status==='wrong')return finishAttempt(false);
-      status.innerHTML=`ההקלטה נשמרה ✅ <div class="letterManual"><button id="letterAgain" class="ghost">🔁 נסה שוב</button><button id="letterNext" class="primary">הבא</button></div>`;
-      $('#letterAgain').onclick=()=>finishAttempt(false);$('#letterNext').onclick=()=>nextItem();
+      const ev=result.evaluation||{};
+      if(ev.status==='correct'){
+        const heard=ev.transcript?` שמעתי: „${ev.transcript}”` : '';
+        status.textContent=`🎉 מצוין!${heard}`;
+        return setTimeout(nextItem,1100);
+      }
+      if(ev.status==='wrong'){
+        const heard=ev.transcript?`שמעתי: „${ev.transcript}”. `:'';
+        if(attemptNo<3){attemptNo++;renderItem(`${heard}ננסה שוב — הקשב לצליל וחזור רק עליו`);}
+        else{status.textContent=`${heard}ממשיכים לתרגיל הבא`;setTimeout(nextItem,1200);}
+        return;
+      }
+      const heard=ev.transcript?`שמעתי משהו שנשמע כמו „${ev.transcript}”, אבל אני לא בטוחה.`:'לא הצלחתי לזהות את הצליל בוודאות.';
+      status.innerHTML=`${heard}<div class="letterManual"><button id="letterAgain" class="ghost">🔁 הקלט שוב</button><button id="letterNext" class="primary">הבא</button></div>`;
+      $('#letterAgain').onclick=()=>{if(attemptNo<3)attemptNo++;renderItem('נסה לומר את הצליל קצת יותר ברור וארוך');};
+      $('#letterNext').onclick=()=>nextItem();
     }catch(e){recorderCtl=null;if(btn)btn.textContent='🎤 הקלט';if(status)status.textContent=e.message==='recording_not_supported'?'המכשיר לא תומך בהקלטה':'לא הצלחתי להקליט. נסה שוב.';}
-  }
-  function finishAttempt(correct){
-    if(correct){$('#letterStatus').textContent='🎉 מצוין!';return setTimeout(nextItem,800);}
-    if(attemptNo<3){attemptNo++;renderItem('ננסה שוב — הקשב לצליל וחזור רק עליו');}
-    else{nextItem();}
   }
   function nextItem(){attemptNo=1;index=(index+1)%items.length;renderItem();}
   document.addEventListener('click',e=>{if(running&&e.target.closest?.('#modeBtn'))stopGame();},true);
