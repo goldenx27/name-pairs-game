@@ -1,12 +1,16 @@
-const CACHE = 'crew-app-v4';
+const CACHE = 'crew-app-v5';
 const SHELL = [
   '/',
   '/styles.css',
   '/v02.css',
   '/progress.css',
+  '/storage-audit.css',
+  '/access.css',
   '/app.js',
   '/game-mode-fix.js',
   '/progress.js',
+  '/storage-audit.js',
+  '/access.js',
   '/install.js',
   '/manifest.webmanifest',
   '/app-icon-192.png',
@@ -44,10 +48,10 @@ self.addEventListener('fetch', event => {
   }
 
   event.respondWith(
-    caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
-      const copy = response.clone();
-      caches.open(CACHE).then(cache => cache.put(event.request, copy));
+    fetch(event.request).then(response => {
+      const copy=response.clone();
+      caches.open(CACHE).then(cache=>cache.put(event.request,copy));
       return response;
-    }))
+    }).catch(()=>caches.match(event.request))
   );
 });
