@@ -9,15 +9,37 @@ const state = {
   editId: null,
   pairOpen: [],
   pairLocked: false,
-  pairMatched: new Set()
+  pairMatched: new Set(),
+  repeatPrompt: null
 };
 
+let activeAudio = null;
 const show = (id, on = true) => $(id).classList.toggle('hidden', !on);
 async function api(path, opts = {}) {
   const r = await fetch(path, opts);
   const d = await r.json();
   if (!r.ok) throw new Error(d.error || 'request_failed');
   return d;
+}
+function stopAudio(){
+  if(activeAudio){activeAudio.pause();activeAudio.currentTime=0;activeAudio=null;}
+  if('speechSynthesis' in window) speechSynthesis.cancel();
+}
+function playAudio(src){
+  stopAudio();
+  activeAudio=new Audio(src);
+  activeAudio.onended=()=>{activeAudio=null;};
+  return activeAudio.play().catch(()=>{});
+}
+function speakHebrew(text,fallbackAudio){
+  stopAudio();
+  if('speechSynthesis' in window){
+    const u=new SpeechSynthesisUtterance(text);u.lang='he-IL';u.rate=.9;u.pitch=1;
+    u.onerror=()=>fallbackAudio&&playAudio(fallbackAudio);
+    speechSynthesis.speak(u);
+    return;
+  }
+  if(fallbackAudio)playAudio(fallbackAudio);
 }
 
 async function init() {
@@ -47,7 +69,7 @@ function renderCrew(chars) {
   document.querySelectorAll('.person').forEach(el => {
     el.onclick = () => {
       const c = chars.find(x => x.id === el.dataset.id);
-      new Audio(c.audio).play();
+      playAudio(c.audio);
     };
   });
 }
@@ -63,6 +85,7 @@ async function ensureSession() {
 }
 
 async function nextRound() {
+  stopAudio();
   await ensureSession();
   show('#nextBtn', false);
   show('#playAgain', false);
@@ -70,6 +93,7 @@ async function nextRound() {
   $('#gameStage').innerHTML = '';
   const d = await api(`/api/game/next?playerId=${state.playerId}`);
   state.current = d;
+  state.repeatPrompt = null;
   state.pairOpen = [];
   state.pairLocked = false;
   state.pairMatched = new Set();
@@ -84,9 +108,11 @@ async function nextRound() {
 }
 
 function renderFind(d) {
-  $('#prompt').textContent = `איפה ${d.target.name}?`;
+  const phrase=`איפה ${d.target.name}?`;
+  $('#prompt').textContent = phrase;
   show('#playAgain');
-  new Audio(d.target.audio).play();
+  state.repeatPrompt=()=>speakHebrew(phrase,d.target.audio);
+  state.repeatPrompt();
   $('#gameStage').innerHTML = `<div id="choices" class="choices"></div>`;
   $('#choices').innerHTML = d.options.map(c => {
     const slot = c.id === d.target.id ? d.imageSlot : (Math.random() < .5 ? 1 : 2);
@@ -97,6 +123,7 @@ function renderFind(d) {
 
 async function chooseFind(btn) {
   if (btn.disabled) return;
+  stopAudio();
   document.querySelectorAll('.choice').forEach(x => x.disabled = true);
   const ok = btn.dataset.id === state.current.target.id;
   btn.classList.add(ok ? 'good' : 'bad');
@@ -112,18 +139,23 @@ function renderWho(d) {
   $('#prompt').textContent = 'מי זה? 👀';
   const image = d.imageSlot === 1 ? d.target.image1 : d.target.image2;
   $('#gameStage').innerHTML = `
-    <div class="whoCard"><img src="${image}" alt=""></div>
-    <div class="audioChoices">${d.options.map(c => `<button class="audioChoice" data-id="${c.id}">🔊</button>`).join('')}</div>`;
-  document.querySelectorAll('.audioChoice').forEach(b => b.onclick = () => chooseWho(b));
+    <div class="whoLayout">
+      <div class="whoCard"><img src="${image}" alt=""></div>
+      <div class="audioChoices">${d.options.map(c => `<div class="audioOption" data-id="${c.id}"><button class="audioListen" type="button" aria-label="השמע אפשרות">🔊</button><button class="audioAnswer ghost" type="button">זה!</button></div>`).join('')}</div>
+    </div>`;
+  document.querySelectorAll('.audioOption').forEach(row=>{
+    const option=d.options.find(c=>c.id===row.dataset.id);
+    row.querySelector('.audioListen').onclick=()=>playAudio(option.audio);
+    row.querySelector('.audioAnswer').onclick=()=>chooseWho(row,option);
+  });
 }
 
-async function chooseWho(btn) {
-  if (btn.disabled) return;
-  const option = state.current.options.find(c => c.id === btn.dataset.id);
-  await new Audio(option.audio).play().catch(()=>{});
-  document.querySelectorAll('.audioChoice').forEach(x => x.disabled = true);
+async function chooseWho(row,option) {
+  if (row.querySelector('.audioAnswer').disabled) return;
+  stopAudio();
+  document.querySelectorAll('.audioOption button').forEach(x => x.disabled = true);
   const ok = option.id === state.current.target.id;
-  btn.classList.add(ok ? 'good' : 'bad');
+  row.classList.add(ok ? 'goodOption' : 'badOption');
   $('#feedback').textContent = ok ? `🎉 ${state.current.target.name}!` : '🙂 ננסה שוב בהמשך';
   const res = await postResult({
     eventType:'who_is_it', characterId:state.current.target.id,
@@ -143,9 +175,8 @@ function renderPairs(d) {
 
 async function flipCard(btn) {
   if (state.pairLocked || btn.classList.contains('matched') || btn.classList.contains('revealed')) return;
+  stopAudio();
   btn.classList.add('revealed');
-  const card = state.current.cards.find(c => c.cardId === btn.dataset.card);
-  new Audio(card.audio).play();
   state.pairOpen.push(btn);
   if (state.pairOpen.length < 2) return;
 
@@ -155,21 +186,21 @@ async function flipCard(btn) {
     a.classList.add('matched'); b.classList.add('matched');
     state.pairMatched.add(a.dataset.char);
     const matchedCard = state.current.cards.find(c => c.characterId === a.dataset.char);
-    const res = await postResult({
+    playAudio(matchedCard.audio);
+    await postResult({
       eventType:'pair_match', characterId:a.dataset.char,
-      selectedCharacterId:a.dataset.char, imageSlot:Number(matchedCard.imageSlot), result:'correct'
+      selectedCharacterId:a.dataset.char, imageSlot:Number(matchedCard.imageSlot)
     });
-    if (res.unlocked) $('#feedback').textContent = `🎁 ${res.unlocked.name} הצטרף/ה לחבורה!`;
     state.pairOpen = [];
     state.pairLocked = false;
-    await refresh();
     const totalPairs = new Set(state.current.cards.map(c=>c.characterId)).size;
     if (state.pairMatched.size === totalPairs) {
-      $('#feedback').textContent = $('#feedback').textContent || '🎉 מצאת את כולם!';
+      $('#feedback').textContent = '🎉 מצאת את כולם!';
       show('#nextBtn');
     }
   } else {
     setTimeout(() => {
+      stopAudio();
       a.classList.remove('revealed'); b.classList.remove('revealed');
       state.pairOpen = [];
       state.pairLocked = false;
@@ -190,7 +221,7 @@ async function afterResult(res) {
   show('#nextBtn');
 }
 
-$('#playAgain').onclick = () => state.current?.target && new Audio(state.current.target.audio).play();
+$('#playAgain').onclick = () => state.repeatPrompt?.();
 $('#nextBtn').onclick = nextRound;
 
 $('#bootstrapBtn').onclick = async () => {
@@ -253,6 +284,7 @@ async function openParent() {
   await loadAdmin();
 }
 function closeParent() {
+  stopAudio();
   show('#parent',false); show('#game'); show('#crew');
   $('#modeBtn').textContent = '🔒 אזור הורה';
   state.parentPin = null;
