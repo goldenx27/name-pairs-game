@@ -1,5 +1,6 @@
 import app from './index.js';
 import { handleAuthApi, requireRole } from './auth.js';
+import { handleSpeechApi } from './speech.js';
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
   status,
@@ -141,6 +142,7 @@ export default {
   async fetch(request,env,ctx){
     const url=new URL(request.url);
     try{
+      const speechResponse=await handleSpeechApi(request,env,url);if(speechResponse)return speechResponse;
       const authResponse=await handleAuthApi(request,env,url);if(authResponse)return authResponse;
       const extra=await handleManagementExtras(request,env,url);if(extra)return extra;
       const mediaResponse=await handleAdminMedia(request,env,url);if(mediaResponse)return mediaResponse;
