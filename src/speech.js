@@ -4,6 +4,43 @@ const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:
 const id=prefix=>`${prefix}_${crypto.randomUUID()}`;
 const now=()=>new Date().toISOString();
 
+const HEBREW_LETTER_NAMES={
+  'א':['אלף'],'ב':['בית','בּית'],'ג':['גימל'],'ד':['דלת'],'ה':['הא'],'ו':['וו','ואו'],'ז':['זין'],'ח':['חית'],'ט':['טית'],'י':['יוד'],'כ':['כף'],'ך':['כף'],'ל':['למד'],'מ':['מם'],'ם':['מם'],'נ':['נון'],'ן':['נון'],'ס':['סמך'],'ע':['עין'],'פ':['פה'],'ף':['פה'],'צ':['צדי','צדיק'],'ץ':['צדי','צדיק'],'ק':['קוף'],'ר':['ריש'],'ש':['שין'],'ת':['תו']
+};
+function normalizeHebrew(text){
+  return String(text||'').normalize('NFKD').replace(/[\u0591-\u05C7]/g,'').replace(/[^\u05D0-\u05EA]/g,'');
+}
+function evaluateTranscript(target,transcript){
+  const t=normalizeHebrew(target),x=normalizeHebrew(transcript);
+  if(!t||!x)return {status:'pending',score:null};
+  if(x.includes(t))return {status:'correct',score:1};
+  if(t.length===1){
+    const names=HEBREW_LETTER_NAMES[t]||[];
+    if(names.some(n=>x.includes(normalizeHebrew(n))))return {status:'correct',score:1};
+  }
+  return {status:'wrong',score:0};
+}
+
+async function transcribeAttempt(env,audio,target){
+  if(!env.AI)return {status:'pending',transcript:'',score:null,evaluator:'workers_ai_missing'};
+  try{
+    const bytes=[...new Uint8Array(await audio.arrayBuffer())];
+    const result=await env.AI.run('@cf/openai/whisper-large-v3-turbo',{
+      audio:bytes,
+      task:'transcribe',
+      language:'he',
+      vad_filter:true,
+      initial_prompt:`ילד אומר רק אות עברית אחת או צליל קצר. האות המצופה היא ${target}. תמלל בדיוק את מה שנשמע.`
+    });
+    const transcript=String(result?.text||'').trim();
+    const evaluation=evaluateTranscript(target,transcript);
+    return {...evaluation,transcript,evaluator:'workers_ai_whisper_large_v3_turbo'};
+  }catch(e){
+    console.error('speech evaluation failed',e);
+    return {status:'pending',transcript:'',score:null,evaluator:'workers_ai_error'};
+  }
+}
+
 async function serveSpeechMedia(env,url){
   const m=url.pathname.match(/^\/api\/speech-media\/([^/]+)\/(image|prompt)$/);
   if(!m)return null;
@@ -71,9 +108,11 @@ export async function handleSpeechApi(request,env,url){
     ]);
     if(!player)return json({error:'player_not_found'},404);if(!item)return json({error:'speech_item_not_found'},404);
     const attemptId=id('speech_attempt'),key=`speech_attempts/${playerId}/${item.id}/${attemptId}`;
+    const evaluation=await transcribeAttempt(env,audio,item.target_text);
     await env.MEDIA.put(key,audio.stream(),{httpMetadata:{contentType:audio.type||'audio/webm'}});
-    await env.DB.prepare(`INSERT INTO speech_attempts(id,player_id,item_id,attempt_no,response_audio_key) VALUES(?,?,?,?,?)`).bind(attemptId,playerId,item.id,attemptNo,key).run();
-    return json({attemptId,evaluation:{status:'pending',targetText:item.target_text,evaluator:'pending_stt'}},201);
+    await env.DB.prepare(`INSERT INTO speech_attempts(id,player_id,item_id,attempt_no,response_audio_key,transcript,score,result,evaluator,evaluated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`)
+      .bind(attemptId,playerId,item.id,attemptNo,key,evaluation.transcript||null,evaluation.score,evaluation.status,evaluation.evaluator,evaluation.status==='pending'?null:now()).run();
+    return json({attemptId,evaluation:{status:evaluation.status,targetText:item.target_text,transcript:evaluation.transcript,score:evaluation.score,evaluator:evaluation.evaluator}},201);
   }
 
   return null;
