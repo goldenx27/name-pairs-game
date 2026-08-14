@@ -46,9 +46,9 @@
   async function loadUsers(){
     const [users,parents]=await Promise.all([api('/api/manage/users'),api('/api/manage/parents')]);
     parentsCache=parents;adminFamilies=new Map(parents.map(p=>[p.id,p.family_id]));
-    const admins=users.filter(u=>u.global_role==='ADMIN'), parentUsers=users.filter(u=>u.global_role==='PARENT'), children=users.filter(u=>u.global_role==='CHILD');
+    const admins=users.filter(u=>u.global_role==='ADMIN'), parentUsers=users.filter(u=>u.global_role==='PARENT');
     const group=(title,items)=>`<div class="userGroup"><h4>${title} <span>${items.length}</span></h4>${items.length?items.map(userRow).join(''):'<div class="muted userGroupEmpty">אין משתמשים</div>'}</div>`;
-    $('#userRows').innerHTML=`${group('👨‍👩‍👧 הורים',parentUsers)}${group('👦 ילדים',children)}${admins.length?group('🔑 מנהלים',admins):''}`;
+    $('#userRows').innerHTML=`${group('👨‍👩‍👧 הורים',parentUsers)}${admins.length?group('🔑 מנהלים',admins):''}`;
     document.querySelectorAll('.deleteUser').forEach(b=>b.onclick=()=>deleteUser(b.dataset.id,b.dataset.name));
     $('#childParentSelect').innerHTML='<option value="">בחר הורה</option>'+parents.map(p=>`<option value="${p.id}">${esc(p.display_name)} (${esc(p.username)})</option>`).join('');
   }
