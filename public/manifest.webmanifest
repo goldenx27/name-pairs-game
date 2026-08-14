@@ -1,0 +1,21 @@
+{
+  "name": "החבורה שלי",
+  "short_name": "החבורה שלי",
+  "description": "משחק זיכרון והיכרות עם החבורה",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f5f6fa",
+  "theme_color": "#6d5dfc",
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
