@@ -23,7 +23,17 @@ async function listAllObjects(bucket) {
 async function storageAudit(env) {
   const rows=await env.DB.prepare(`SELECT id,name,family_id,enabled,image_1_key,image_2_key,audio_key FROM characters ORDER BY created_at ASC`).all();
   const referenced=new Map();
-  for(const c of rows.results) for(const [kind,key] of [['image1',c.image_1_key],['image2',c.image_2_key],['audio',c.audio_key]]) if(key) referenced.set(key,{characterId:c.id,name:c.name,kind,enabled:c.enabled,familyId:c.family_id});
+  for(const c of rows.results) for(const [kind,key] of [['image1',c.image_1_key],['image2',c.image_2_key],['audio',c.audio_key]]) if(key) referenced.set(key,{characterId:c.id,name:c.name,kind,enabled:c.enabled,familyId:c.family_id,source:'character'});
+
+  // Speech practice media lives in the same R2 bucket and must NEVER be treated as orphaned.
+  const speechRows=await env.DB.prepare(`SELECT id,title,enabled,image_key,prompt_audio_key FROM speech_items`).all().catch(()=>({results:[]}));
+  for(const s of speechRows.results||[]) {
+    if(s.image_key) referenced.set(s.image_key,{speechItemId:s.id,name:s.title,kind:'speechImage',enabled:s.enabled,source:'speech_item'});
+    if(s.prompt_audio_key) referenced.set(s.prompt_audio_key,{speechItemId:s.id,name:s.title,kind:'speechPromptAudio',enabled:s.enabled,source:'speech_item'});
+  }
+  const attemptRows=await env.DB.prepare(`SELECT id,player_id,item_id,response_audio_key FROM speech_attempts`).all().catch(()=>({results:[]}));
+  for(const a of attemptRows.results||[]) if(a.response_audio_key) referenced.set(a.response_audio_key,{attemptId:a.id,playerId:a.player_id,itemId:a.item_id,kind:'speechResponseAudio',source:'speech_attempt'});
+
   const objects=await listAllObjects(env.MEDIA), objectMap=new Map(objects.map(o=>[o.key,o]));
   const missing=[];for(const [key,ref] of referenced) if(!objectMap.has(key)) missing.push({key,...ref});
   const orphaned=objects.filter(o=>!referenced.has(o.key));
@@ -32,7 +42,7 @@ async function storageAudit(env) {
     const keys=[c.image_1_key,c.image_2_key,c.audio_key].filter(Boolean),present=keys.filter(k=>objectMap.has(k)).length;
     return {id:c.id,name:c.name,enabled:!!c.enabled,familyId:c.family_id,expectedFiles:keys.length,presentFiles:present,complete:present===keys.length,files:{image1:c.image_1_key?objectMap.has(c.image_1_key):false,image2:c.image_2_key?objectMap.has(c.image_2_key):false,audio:c.audio_key?objectMap.has(c.audio_key):false}};
   });
-  return {generatedAt:now(),summary:{characters:characters.length,completeCharacters:characters.filter(c=>c.complete).length,r2Objects:objects.length,referencedObjects:referencedObjects.length,orphanedObjects:orphaned.length,missingObjects:missing.length,totalBytes:objects.reduce((n,o)=>n+o.size,0),referencedBytes:referencedObjects.reduce((n,o)=>n+o.size,0),orphanedBytes:orphaned.reduce((n,o)=>n+o.size,0)},characters,missing,orphaned};
+  return {generatedAt:now(),summary:{characters:characters.length,completeCharacters:characters.filter(c=>c.complete).length,speechItems:(speechRows.results||[]).length,speechAttempts:(attemptRows.results||[]).length,r2Objects:objects.length,referencedObjects:referencedObjects.length,orphanedObjects:orphaned.length,missingObjects:missing.length,totalBytes:objects.reduce((n,o)=>n+o.size,0),referencedBytes:referencedObjects.reduce((n,o)=>n+o.size,0),orphanedBytes:orphaned.reduce((n,o)=>n+o.size,0)},characters,missing,orphaned};
 }
 
 async function handleStorageApi(request,env,url){
@@ -41,7 +51,10 @@ async function handleStorageApi(request,env,url){
   if(request.method!=='POST')return json({error:'method_not_allowed'},405);
   if(url.pathname==='/api/storage/audit')return json(await storageAudit(env));
   const body=await request.json().catch(()=>({})),audit=await storageAudit(env);
-  const requested=Array.isArray(body.keys)?body.keys:audit.orphaned.map(o=>o.key),allowed=new Set(audit.orphaned.map(o=>o.key)),keys=requested.filter(k=>allowed.has(k));
+  const protectedPrefix=k=>k.startsWith('speech_items/')||k.startsWith('speech_attempts/');
+  const requested=Array.isArray(body.keys)?body.keys:audit.orphaned.map(o=>o.key);
+  const allowed=new Set(audit.orphaned.map(o=>o.key).filter(k=>!protectedPrefix(k)));
+  const keys=requested.filter(k=>allowed.has(k)&&!protectedPrefix(k));
   for(let i=0;i<keys.length;i+=1000)await env.MEDIA.delete(keys.slice(i,i+1000));
   return json({ok:true,deleted:keys.length,deletedKeys:keys});
 }
