@@ -40,30 +40,66 @@ export async function handleAuthApi(request,env,url){
  if(request.method==='POST'&&path==='/api/auth/login'){const b=await request.json().catch(()=>({})),username=String(b.username||'').trim().toLowerCase();const row=await env.DB.prepare(`SELECT * FROM app_users WHERE username=? AND active=1 AND global_role IN ('ADMIN','PARENT')`).bind(username).first();if(!row||!(await verifyPassword(String(b.password||''),row.password_salt,row.password_hash)))return json({error:'invalid_credentials'},401);const s=await createSession(env,row.id,request.headers.get('user-agent')||'');return json({user:{id:row.id,username:row.username,displayName:row.display_name,role:row.global_role}},200,{'set-cookie':setCookie(s.token)});}
  if(request.method==='POST'&&path==='/api/auth/logout'){const user=await currentUser(request,env);if(user)await env.DB.prepare(`DELETE FROM auth_sessions WHERE id=?`).bind(user.sessionId).run();return json({ok:true},200,{'set-cookie':clearCookie()});}
  if(request.method==='GET'&&path==='/api/auth/me'){const user=await currentUser(request,env);return user?json({user}):json({error:'unauthorized'},401);}
- if(request.method==='GET'&&path==='/api/manage/users'){const auth=await requireRole(request,env,['ADMIN']);if(auth.error)return auth.error;const rows=await env.DB.prepare(`SELECT id,username,display_name,global_role,active,created_at FROM app_users ORDER BY created_at DESC`).all();return json(rows.results);}
- if(request.method==='GET'&&path==='/api/manage/parents'){const auth=await requireRole(request,env,['ADMIN']);if(auth.error)return auth.error;const rows=await env.DB.prepare(`SELECT u.id,u.username,u.display_name,fm.family_id FROM app_users u JOIN family_memberships fm ON fm.user_id=u.id AND fm.role='PARENT' AND fm.active=1 WHERE u.global_role='PARENT' AND u.active=1 ORDER BY u.display_name`).all();return json(rows.results);}
+
+ if(request.method==='GET'&&path==='/api/manage/users'){
+   const auth=await requireRole(request,env,['ADMIN']);if(auth.error)return auth.error;
+   const rows=await env.DB.prepare(`SELECT id,username,display_name,global_role,active,created_at FROM app_users WHERE active=1 ORDER BY created_at DESC`).all();
+   return json(rows.results);
+ }
+ const userDelete=path.match(/^\/api\/manage\/users\/([^/]+)$/);
+ if(request.method==='DELETE'&&userDelete){
+   const auth=await requireRole(request,env,['ADMIN']);if(auth.error)return auth.error;
+   const userId=userDelete[1];
+   if(userId===auth.user.id)return json({error:'cannot_delete_current_admin'},409);
+   const target=await env.DB.prepare(`SELECT id,global_role,active FROM app_users WHERE id=?`).bind(userId).first();
+   if(!target)return json({error:'user_not_found'},404);
+   if(!target.active)return json({ok:true});
+   const statements=[
+     env.DB.prepare(`UPDATE app_users SET active=0,updated_at=? WHERE id=?`).bind(now(),userId),
+     env.DB.prepare(`DELETE FROM auth_sessions WHERE user_id=?`).bind(userId),
+     env.DB.prepare(`UPDATE family_memberships SET active=0 WHERE user_id=?`).bind(userId)
+   ];
+   if(target.global_role==='PARENT') statements.push(env.DB.prepare(`DELETE FROM parent_children WHERE parent_user_id=?`).bind(userId));
+   if(target.global_role==='CHILD'){
+     const child=await env.DB.prepare(`SELECT player_id FROM child_accounts WHERE user_id=?`).bind(userId).first();
+     if(child) statements.push(env.DB.prepare(`DELETE FROM parent_children WHERE child_player_id=?`).bind(child.player_id));
+   }
+   await env.DB.batch(statements);
+   return json({ok:true});
+ }
+
+ if(request.method==='GET'&&path==='/api/manage/parents'){
+   const auth=await requireRole(request,env,['ADMIN']);if(auth.error)return auth.error;
+   const rows=await env.DB.prepare(`SELECT u.id,u.username,u.display_name,fm.family_id FROM app_users u JOIN family_memberships fm ON fm.user_id=u.id AND fm.role='PARENT' AND fm.active=1 WHERE u.global_role='PARENT' AND u.active=1 ORDER BY u.display_name`).all();
+   return json(rows.results);
+ }
  if(request.method==='POST'&&path==='/api/manage/parents'){const auth=await requireRole(request,env,['ADMIN']);if(auth.error)return auth.error;const b=await request.json().catch(()=>({}));try{const parent=await createUser(env,{username:b.username,displayName:b.displayName||b.username,role:'PARENT',password:b.password,createdBy:auth.user.id});let familyId=String(b.familyId||'');if(!familyId){familyId=id('fam');await env.DB.prepare(`INSERT INTO families(id,name) VALUES(?,?)`).bind(familyId,b.familyName||`${parent.displayName} family`).run();}await env.DB.prepare(`INSERT OR IGNORE INTO family_memberships(family_id,user_id,role,created_by) VALUES(?,?,'PARENT',?)`).bind(familyId,parent.id,auth.user.id).run();return json({parent,familyId},201);}catch(e){return json({error:String(e.message||e)},400);}}
- if(request.method==='GET'&&path==='/api/manage/children'){const auth=await requireRole(request,env,['ADMIN','PARENT']);if(auth.error)return auth.error;const rows=auth.user.role==='ADMIN'?await env.DB.prepare(`SELECT ca.player_id,au.id user_id,au.username,au.display_name,p.family_id,p.created_at FROM child_accounts ca JOIN app_users au ON au.id=ca.user_id JOIN players p ON p.id=ca.player_id WHERE au.active=1 ORDER BY au.display_name`).all():await env.DB.prepare(`SELECT ca.player_id,au.id user_id,au.username,au.display_name,p.family_id,p.created_at FROM parent_children pc JOIN child_accounts ca ON ca.player_id=pc.child_player_id JOIN app_users au ON au.id=ca.user_id JOIN players p ON p.id=ca.player_id WHERE pc.parent_user_id=? AND au.active=1 ORDER BY au.display_name`).bind(auth.user.id).all();return json(rows.results);}
+
+ if(request.method==='GET'&&path==='/api/manage/children'){
+   const auth=await requireRole(request,env,['ADMIN','PARENT']);if(auth.error)return auth.error;
+   const rows=auth.user.role==='ADMIN'
+     ? await env.DB.prepare(`SELECT ca.player_id,au.id user_id,au.username,au.display_name,p.family_id,p.created_at,pc.parent_user_id,parent.display_name parent_name,f.name family_name FROM child_accounts ca JOIN app_users au ON au.id=ca.user_id JOIN players p ON p.id=ca.player_id LEFT JOIN parent_children pc ON pc.child_player_id=ca.player_id LEFT JOIN app_users parent ON parent.id=pc.parent_user_id AND parent.active=1 LEFT JOIN families f ON f.id=p.family_id WHERE au.active=1 ORDER BY au.display_name`).all()
+     : await env.DB.prepare(`SELECT ca.player_id,au.id user_id,au.username,au.display_name,p.family_id,p.created_at,pc.parent_user_id,parent.display_name parent_name,f.name family_name FROM parent_children pc JOIN child_accounts ca ON ca.player_id=pc.child_player_id JOIN app_users au ON au.id=ca.user_id JOIN players p ON p.id=ca.player_id LEFT JOIN app_users parent ON parent.id=pc.parent_user_id LEFT JOIN families f ON f.id=p.family_id WHERE pc.parent_user_id=? AND au.active=1 ORDER BY au.display_name`).bind(auth.user.id).all();
+   return json(rows.results);
+ }
  if(request.method==='POST'&&path==='/api/manage/children'){const auth=await requireRole(request,env,['ADMIN','PARENT']);if(auth.error)return auth.error;const b=await request.json().catch(()=>({}));let familyId=String(b.familyId||'');if(auth.user.role==='PARENT'){const fm=await env.DB.prepare(`SELECT family_id FROM family_memberships WHERE user_id=? AND role='PARENT' AND active=1 LIMIT 1`).bind(auth.user.id).first();if(!fm)return json({error:'parent_has_no_family'},400);familyId=fm.family_id;}if(!familyId)return json({error:'family_required'},400);try{const child=await createUser(env,{username:b.username||`child_${crypto.randomUUID().slice(0,8)}`,displayName:b.displayName||'ילד',role:'CHILD',createdBy:auth.user.id}),playerId=id('player');await env.DB.batch([env.DB.prepare(`INSERT INTO players(id,family_id,name) VALUES(?,?,?)`).bind(playerId,familyId,child.displayName),env.DB.prepare(`INSERT INTO player_state(player_id,current_pool_size) VALUES(?,2)`).bind(playerId),env.DB.prepare(`INSERT INTO child_accounts(user_id,player_id,family_id) VALUES(?,?,?)`).bind(child.id,playerId,familyId),env.DB.prepare(`INSERT OR IGNORE INTO family_memberships(family_id,user_id,role,created_by) VALUES(?,?,'CHILD',?)`).bind(familyId,child.id,auth.user.id)]);if(auth.user.role==='PARENT')await env.DB.prepare(`INSERT OR IGNORE INTO parent_children(parent_user_id,child_player_id,family_id,created_by) VALUES(?,?,?,?)`).bind(auth.user.id,playerId,familyId,auth.user.id).run();if(auth.user.role==='ADMIN'&&b.parentUserId)await env.DB.prepare(`INSERT OR IGNORE INTO parent_children(parent_user_id,child_player_id,family_id,created_by) VALUES(?,?,?,?)`).bind(b.parentUserId,playerId,familyId,auth.user.id).run();return json({child,playerId,familyId},201);}catch(e){return json({error:String(e.message||e)},400);}}
+
  if(request.method==='POST'&&path==='/api/manage/assign-child'){
    const auth=await requireRole(request,env,['ADMIN']);if(auth.error)return auth.error;
    const b=await request.json().catch(()=>({}));
    const child=await env.DB.prepare(`SELECT ca.family_id,ca.user_id FROM child_accounts ca JOIN app_users u ON u.id=ca.user_id WHERE ca.player_id=? AND u.active=1`).bind(b.playerId).first();
    const parent=await env.DB.prepare(`SELECT fm.family_id FROM family_memberships fm JOIN app_users u ON u.id=fm.user_id WHERE fm.user_id=? AND fm.role='PARENT' AND fm.active=1 AND u.active=1`).bind(b.parentUserId).first();
-   if(!child)return json({error:'child_not_found'},404); if(!parent)return json({error:'parent_not_found'},404);
+   if(!child)return json({error:'child_not_found'},404);if(!parent)return json({error:'parent_not_found'},404);
    const targetFamily=parent.family_id;
-   if(child.family_id!==targetFamily){
-     const existingLinks=await env.DB.prepare(`SELECT COUNT(*) AS n FROM parent_children WHERE child_player_id=?`).bind(b.playerId).first();
-     if(Number(existingLinks?.n||0)>0)return json({error:'child_already_belongs_to_another_family'},409);
-     await env.DB.batch([
-       env.DB.prepare(`UPDATE players SET family_id=? WHERE id=?`).bind(targetFamily,b.playerId),
-       env.DB.prepare(`UPDATE child_accounts SET family_id=? WHERE player_id=?`).bind(targetFamily,b.playerId),
-       env.DB.prepare(`DELETE FROM family_memberships WHERE user_id=? AND role='CHILD'`).bind(child.user_id),
-       env.DB.prepare(`INSERT OR IGNORE INTO family_memberships(family_id,user_id,role,created_by) VALUES(?,?,'CHILD',?)`).bind(targetFamily,child.user_id,auth.user.id)
-     ]);
-   }
-   await env.DB.prepare(`INSERT OR IGNORE INTO parent_children(parent_user_id,child_player_id,family_id,created_by) VALUES(?,?,?,?)`).bind(b.parentUserId,b.playerId,targetFamily,auth.user.id).run();
-   return json({ok:true});
+   await env.DB.batch([
+     env.DB.prepare(`DELETE FROM parent_children WHERE child_player_id=?`).bind(b.playerId),
+     env.DB.prepare(`UPDATE players SET family_id=? WHERE id=?`).bind(targetFamily,b.playerId),
+     env.DB.prepare(`UPDATE child_accounts SET family_id=? WHERE player_id=?`).bind(targetFamily,b.playerId),
+     env.DB.prepare(`DELETE FROM family_memberships WHERE user_id=? AND role='CHILD'`).bind(child.user_id),
+     env.DB.prepare(`INSERT OR REPLACE INTO family_memberships(family_id,user_id,role,active,created_by,created_at) VALUES(?,?,'CHILD',1,?,CURRENT_TIMESTAMP)`).bind(targetFamily,child.user_id,auth.user.id),
+     env.DB.prepare(`INSERT INTO parent_children(parent_user_id,child_player_id,family_id,created_by) VALUES(?,?,?,?)`).bind(b.parentUserId,b.playerId,targetFamily,auth.user.id)
+   ]);
+   return json({ok:true,parentUserId:b.parentUserId,familyId:targetFamily});
  }
  const unassign=path.match(/^\/api\/manage\/parents\/([^/]+)\/children\/([^/]+)$/);if(request.method==='DELETE'&&unassign){const auth=await requireRole(request,env,['ADMIN','PARENT']);if(auth.error)return auth.error;const parentId=unassign[1],playerId=unassign[2];if(auth.user.role==='PARENT'&&parentId!==auth.user.id)return json({error:'forbidden'},403);await env.DB.prepare(`DELETE FROM parent_children WHERE parent_user_id=? AND child_player_id=?`).bind(parentId,playerId).run();return json({ok:true});}
  const progress=path.match(/^\/api\/manage\/children\/([^/]+)\/progress$/);if(request.method==='GET'&&progress){const auth=await requireRole(request,env,['ADMIN','PARENT']);if(auth.error)return auth.error;const playerId=progress[1];if(!(await canSeePlayer(env,auth.user,playerId)))return json({error:'forbidden'},403);const chars=await env.DB.prepare(`SELECT c.id,c.name,pcs.status,pcs.times_shown,pcs.correct_count,pcs.wrong_count,pcs.score,pcs.image1_correct,pcs.image1_wrong,pcs.image2_correct,pcs.image2_wrong,pcs.last_seen FROM player_character_state pcs JOIN characters c ON c.id=pcs.character_id WHERE pcs.player_id=? AND c.enabled=1 ORDER BY c.priority DESC,c.created_at ASC`).bind(playerId).all();const state=await env.DB.prepare(`SELECT * FROM player_state WHERE player_id=?`).bind(playerId).first();return json({playerId,state,characters:chars.results});}
