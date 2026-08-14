@@ -9,6 +9,7 @@ const id = prefix => `${prefix}_${crypto.randomUUID()}`;
 const now = () => new Date().toISOString();
 const bytesToHex = bytes => [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
 const hexToBytes = hex => new Uint8Array((hex.match(/.{1,2}/g) || []).map(x => parseInt(x, 16)));
+const PBKDF2_ITERATIONS = 100000;
 
 async function sha256(value) {
   return bytesToHex(new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(String(value)))));
@@ -17,7 +18,7 @@ async function sha256(value) {
 export async function hashPassword(password, saltHex = null) {
   const salt = saltHex ? hexToBytes(saltHex) : crypto.getRandomValues(new Uint8Array(16));
   const key = await crypto.subtle.importKey('raw', enc.encode(String(password)), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({name:'PBKDF2', salt, iterations:120000, hash:'SHA-256'}, key, 256);
+  const bits = await crypto.subtle.deriveBits({name:'PBKDF2', salt, iterations:PBKDF2_ITERATIONS, hash:'SHA-256'}, key, 256);
   return { hash: bytesToHex(new Uint8Array(bits)), salt: bytesToHex(salt) };
 }
 
