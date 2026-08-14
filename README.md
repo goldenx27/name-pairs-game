@@ -2,6 +2,8 @@
 
 משחק שמטפטף בהדרגה צמדי תמונות בעלי אותו שם. הילד רואה משחק; מנגנון ההתקדמות נשמר מאחורי הקלעים.
 
+> Auto-deploy test: 2026-08-14
+
 ## Stack
 - Cloudflare Worker — API + game engine
 - Cloudflare D1 — families, players, characters, state, sessions, events, confusions
