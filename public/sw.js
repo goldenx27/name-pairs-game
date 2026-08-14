@@ -1,4 +1,4 @@
-const CACHE = 'crew-app-v13';
+const CACHE = 'crew-app-v14';
 const SHELL = [
   '/', '/styles.css', '/v02.css', '/progress.css', '/storage-audit.css', '/access.css',
   '/app.js', '/game-mode-fix.js', '/progress.js', '/storage-audit.js', '/active-child.js',
