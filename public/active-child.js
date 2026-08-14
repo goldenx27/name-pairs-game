@@ -3,9 +3,37 @@
   let observer = null;
   let setupObserver = null;
 
+  function ensureActiveChildChip() {
+    const headerActions = document.querySelector('.headerActions');
+    if (!headerActions) return null;
+    let chip = $('#activeChildTopChip');
+    if (!chip) {
+      chip = document.createElement('span');
+      chip.id = 'activeChildTopChip';
+      chip.className = 'ghost hidden';
+      chip.style.display = 'inline-flex';
+      chip.style.alignItems = 'center';
+      chip.style.gap = '6px';
+      chip.style.whiteSpace = 'nowrap';
+      chip.style.pointerEvents = 'none';
+      headerActions.insertBefore(chip, $('#modeBtn') || null);
+    }
+    return chip;
+  }
+
+  function syncTopChip() {
+    const chip = ensureActiveChildChip();
+    if (!chip) return;
+    const name = localStorage.activeChildName;
+    const visible = !!localStorage.playerId && !!name;
+    chip.textContent = visible ? `🎮 ${name}` : '';
+    chip.classList.toggle('hidden', !visible);
+  }
+
   function showLockedGame() {
     if (localStorage.playerId) {
       $('#noActiveChild')?.classList.add('hidden');
+      syncTopChip();
       return;
     }
     $('#setup')?.classList.add('hidden');
@@ -19,9 +47,9 @@
       panel.innerHTML = `<div style="text-align:center;padding:18px 8px"><div style="font-size:44px;margin-bottom:8px">🎮</div><h2 style="margin:0 0 8px">לא נבחר ילד פעיל</h2><p class="muted" style="margin:0">כדי להתחיל לשחק, היכנסו ל־ניהול ובחרו ילד באמצעות „הפוך לפעיל”.</p></div>`;
       document.querySelector('main.app > header')?.insertAdjacentElement('afterend', panel);
     }
-    // Do not cover an authenticated management screen.
     if ($('#accessPanel') && !$('#accessPanel').classList.contains('hidden')) panel.classList.add('hidden');
     else panel.classList.remove('hidden');
+    syncTopChip();
   }
 
   function syncChildButtons() {
@@ -34,7 +62,9 @@
       btn.classList.toggle('danger', isActive);
       btn.classList.toggle('ghost', !isActive);
       row.classList.toggle('activeChildRow', isActive);
+      if (isActive && row.dataset.name) localStorage.activeChildName = row.dataset.name;
     });
+    syncTopChip();
   }
 
   function watchChildRows() {
@@ -64,22 +94,28 @@
     if (!btn) return;
     const row = btn.closest('.childRow');
     if (!row) return;
-    if (localStorage.playerId && row.dataset.player === localStorage.playerId) {
+    const isActive = !!localStorage.playerId && row.dataset.player === localStorage.playerId;
+    if (isActive) {
       e.preventDefault();
       e.stopImmediatePropagation();
       localStorage.removeItem('playerId');
       localStorage.removeItem('familyId');
+      localStorage.removeItem('activeChildName');
       syncChildButtons();
       await window.refreshActiveChildManagement?.();
-      // Stay in management. The locked game is shown only after logout.
       $('#noActiveChild')?.classList.add('hidden');
+      return;
     }
+    if (row.dataset.name) localStorage.activeChildName = row.dataset.name;
+    syncTopChip();
   }, true);
 
   window.showActiveChildLock = showLockedGame;
   window.syncActiveChildButtons = syncChildButtons;
+  window.syncActiveChildTopChip = syncTopChip;
 
   window.addEventListener('DOMContentLoaded', () => {
+    ensureActiveChildChip();
     showLockedGame();
     syncChildButtons();
     watchChildRows();
