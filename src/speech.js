@@ -5,14 +5,14 @@ const id=prefix=>`${prefix}_${crypto.randomUUID()}`;
 const now=()=>new Date().toISOString();
 
 async function serveSpeechMedia(env,url){
-  const m=url.pathname.match(/^\/speech-media\/([^/]+)\/(image|prompt)$/);
+  const m=url.pathname.match(/^\/api\/speech-media\/([^/]+)\/(image|prompt)$/);
   if(!m)return null;
   const row=await env.DB.prepare(`SELECT image_key,prompt_audio_key,enabled FROM speech_items WHERE id=?`).bind(m[1]).first();
   if(!row||!row.enabled)return new Response('Not found',{status:404});
   const key=m[2]==='image'?row.image_key:row.prompt_audio_key;
   const obj=await env.MEDIA.get(key);
   if(!obj)return new Response('Not found',{status:404});
-  const headers=new Headers();obj.writeHttpMetadata(headers);headers.set('etag',obj.httpEtag);headers.set('cache-control','private, max-age=3600');
+  const headers=new Headers();obj.writeHttpMetadata(headers);headers.set('etag',obj.httpEtag);headers.set('cache-control','private, no-cache');
   return new Response(obj.body,{headers});
 }
 
@@ -21,7 +21,7 @@ export async function handleSpeechApi(request,env,url){
 
   if(request.method==='GET'&&url.pathname==='/api/speech-items'){
     const rows=await env.DB.prepare(`SELECT id,title,target_text,prompt_text,enabled,created_at,updated_at FROM speech_items WHERE enabled=1 ORDER BY created_at DESC`).all();
-    return json(rows.results.map(r=>({...r,image:`/speech-media/${r.id}/image`,promptAudio:`/speech-media/${r.id}/prompt`})));
+    return json(rows.results.map(r=>({...r,image:`/api/speech-media/${r.id}/image?v=${encodeURIComponent(r.updated_at||r.created_at||'1')}`,promptAudio:`/api/speech-media/${r.id}/prompt?v=${encodeURIComponent(r.updated_at||r.created_at||'1')}`})));
   }
 
   if(request.method==='POST'&&url.pathname==='/api/speech-items'){
@@ -36,7 +36,7 @@ export async function handleSpeechApi(request,env,url){
       env.MEDIA.put(audioKey,promptAudio.stream(),{httpMetadata:{contentType:promptAudio.type||'audio/webm'}})
     ]);
     await env.DB.prepare(`INSERT INTO speech_items(id,title,target_text,prompt_text,image_key,prompt_audio_key) VALUES(?,?,?,?,?,?)`).bind(itemId,title,targetText,promptText,imageKey,audioKey).run();
-    return json({id:itemId,title,targetText,promptText,image:`/speech-media/${itemId}/image`,promptAudio:`/speech-media/${itemId}/prompt`},201);
+    return json({id:itemId,title,targetText,promptText,image:`/api/speech-media/${itemId}/image`,promptAudio:`/api/speech-media/${itemId}/prompt`},201);
   }
 
   const itemMatch=url.pathname.match(/^\/api\/speech-items\/([^/]+)$/);
