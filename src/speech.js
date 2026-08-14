@@ -7,37 +7,43 @@ const now=()=>new Date().toISOString();
 const HEBREW_LETTER_NAMES={
   'א':['אלף'],'ב':['בית','בּית'],'ג':['גימל'],'ד':['דלת'],'ה':['הא'],'ו':['וו','ואו'],'ז':['זין'],'ח':['חית'],'ט':['טית'],'י':['יוד'],'כ':['כף'],'ך':['כף'],'ל':['למד'],'מ':['מם'],'ם':['מם'],'נ':['נון'],'ן':['נון'],'ס':['סמך'],'ע':['עין'],'פ':['פה'],'ף':['פה'],'צ':['צדי','צדיק'],'ץ':['צדי','צדיק'],'ק':['קוף'],'ר':['ריש'],'ש':['שין'],'ת':['תו']
 };
+const HEBREW_SOUND_VARIANTS={
+  'א':['א','אה'],'ב':['ב','בה','בי','בו'],'ג':['ג','גה','גי','גו'],'ד':['ד','דה','די','דו'],'ה':['ה','הא'],'ו':['ו','וו','ואו'],'ז':['ז','זה','זי','זו'],'ח':['ח','חה','חי','חו'],'ט':['ט','טה','טי','טו'],'י':['י','יה','יי'],'כ':['כ','כה','כי','כו'],'ך':['כ','כה','כי','כו'],'ל':['ל','לה','לי','לו'],'מ':['מ','מה','מי','מו'],'ם':['מ','מה','מי','מו'],'נ':['נ','נה','ני','נו'],'ן':['נ','נה','ני','נו'],'ס':['ס','סה','סי','סו'],'ע':['ע','עה'],'פ':['פ','פה','פי','פו'],'ף':['פ','פה','פי','פו'],'צ':['צ','צה','צי','צו'],'ץ':['צ','צה','צי','צו'],'ק':['ק','קה','קי','קו'],'ר':['ר','רה','רי','רו'],'ש':['ש','שה','שי','שו'],'ת':['ת','תה','תי','תו']
+};
 function normalizeHebrew(text){
   return String(text||'').normalize('NFKD').replace(/[\u0591-\u05C7]/g,'').replace(/[^\u05D0-\u05EA]/g,'');
 }
 function evaluateTranscript(target,transcript){
   const t=normalizeHebrew(target),x=normalizeHebrew(transcript);
-  if(!t||!x)return {status:'pending',score:null};
-  if(x.includes(t))return {status:'correct',score:1};
+  if(!t)return {status:'pending',score:null,reason:'missing_target'};
+  if(!x)return {status:'pending',score:null,reason:'no_transcript'};
+  if(x===t||x.includes(t))return {status:'correct',score:1,reason:'direct_match'};
   if(t.length===1){
-    const names=HEBREW_LETTER_NAMES[t]||[];
-    if(names.some(n=>x.includes(normalizeHebrew(n))))return {status:'correct',score:1};
+    const variants=[...(HEBREW_SOUND_VARIANTS[t]||[]),...(HEBREW_LETTER_NAMES[t]||[])].map(normalizeHebrew);
+    if(variants.some(v=>v&&x.includes(v)))return {status:'correct',score:.9,reason:'phoneme_variant'};
+    // Very short ASR output is too unreliable to call a child wrong on a single phoneme.
+    if(x.length<=2)return {status:'pending',score:null,reason:'ambiguous_short_transcript'};
   }
-  return {status:'wrong',score:0};
+  return {status:'wrong',score:0,reason:'different_transcript'};
 }
 
 async function transcribeAttempt(env,audio,target){
-  if(!env.AI)return {status:'pending',transcript:'',score:null,evaluator:'workers_ai_missing'};
+  if(!env.AI)return {status:'pending',transcript:'',score:null,evaluator:'workers_ai_missing',reason:'workers_ai_missing'};
   try{
     const bytes=[...new Uint8Array(await audio.arrayBuffer())];
     const result=await env.AI.run('@cf/openai/whisper-large-v3-turbo',{
       audio:bytes,
       task:'transcribe',
       language:'he',
-      vad_filter:true,
-      initial_prompt:`ילד אומר רק אות עברית אחת או צליל קצר. האות המצופה היא ${target}. תמלל בדיוק את מה שנשמע.`
+      vad_filter:false,
+      initial_prompt:`הקלטה קצרה מאוד של ילד שחוזר על צליל של אות עברית אחת. האות הצפויה היא ${target}. ייתכן שהצליל יישמע כמו ${target}ה, ${target}י או ${target}ו. תמלל רק את הצליל שנשמע.`
     });
     const transcript=String(result?.text||'').trim();
     const evaluation=evaluateTranscript(target,transcript);
     return {...evaluation,transcript,evaluator:'workers_ai_whisper_large_v3_turbo'};
   }catch(e){
     console.error('speech evaluation failed',e);
-    return {status:'pending',transcript:'',score:null,evaluator:'workers_ai_error'};
+    return {status:'pending',transcript:'',score:null,evaluator:'workers_ai_error',reason:'workers_ai_error'};
   }
 }
 
@@ -112,7 +118,7 @@ export async function handleSpeechApi(request,env,url){
     await env.MEDIA.put(key,audio.stream(),{httpMetadata:{contentType:audio.type||'audio/webm'}});
     await env.DB.prepare(`INSERT INTO speech_attempts(id,player_id,item_id,attempt_no,response_audio_key,transcript,score,result,evaluator,evaluated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`)
       .bind(attemptId,playerId,item.id,attemptNo,key,evaluation.transcript||null,evaluation.score,evaluation.status,evaluation.evaluator,evaluation.status==='pending'?null:now()).run();
-    return json({attemptId,evaluation:{status:evaluation.status,targetText:item.target_text,transcript:evaluation.transcript,score:evaluation.score,evaluator:evaluation.evaluator}},201);
+    return json({attemptId,evaluation:{status:evaluation.status,targetText:item.target_text,transcript:evaluation.transcript,score:evaluation.score,evaluator:evaluation.evaluator,reason:evaluation.reason}},201);
   }
 
   return null;
