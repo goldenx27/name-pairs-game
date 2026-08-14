@@ -104,11 +104,28 @@ async function handleReset(request,env,url){
   return json({ok:true});
 }
 
+async function handleManagementExtras(request,env,url){
+  if(request.method==='GET'&&url.pathname==='/api/manage/parents'){
+    const auth=await requireRole(request,env,['ADMIN']);if(auth.error)return auth.error;
+    const rows=await env.DB.prepare(`
+      SELECT u.id,u.username,u.display_name,fm.family_id,f.name family_name
+      FROM app_users u
+      LEFT JOIN family_memberships fm ON fm.user_id=u.id AND fm.role='PARENT' AND fm.active=1
+      LEFT JOIN families f ON f.id=fm.family_id
+      WHERE u.global_role='PARENT' AND u.active=1
+      ORDER BY u.display_name
+    `).all();
+    return json(rows.results);
+  }
+  return null;
+}
+
 export default {
   async fetch(request,env,ctx){
     const url=new URL(request.url);
     try{
       const authResponse=await handleAuthApi(request,env,url);if(authResponse)return authResponse;
+      const extra=await handleManagementExtras(request,env,url);if(extra)return extra;
       const mediaResponse=await handleAdminMedia(request,env,url);if(mediaResponse)return mediaResponse;
       const storageResponse=await handleStorageApi(request,env,url);if(storageResponse)return storageResponse;
       const resetResponse=await handleReset(request,env,url);if(resetResponse)return resetResponse;
