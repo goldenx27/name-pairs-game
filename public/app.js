@@ -105,6 +105,7 @@ async function nextRound() {
   if (d.type === 'find_character') return renderFind(d);
   if (d.type === 'who_is_it') return renderWho(d);
   if (d.type === 'pairs') return renderPairs(d);
+  if (d.type === 'sound_pairs') return renderSoundPairs(d);
 }
 
 function renderFind(d) {
@@ -205,6 +206,62 @@ async function flipCard(btn) {
       state.pairOpen = [];
       state.pairLocked = false;
     }, 700);
+  }
+}
+
+function speakSound(text) {
+  stopAudio();
+  if (!('speechSynthesis' in window)) return;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'he-IL';
+  utterance.rate = .72;
+  utterance.pitch = 1;
+  speechSynthesis.speak(utterance);
+}
+
+function renderSoundPairs(d) {
+  $('#prompt').textContent = 'התאם דמות לצליל 🔊';
+  $('#gameStage').innerHTML = `<div class="memoryGrid soundMemoryGrid">${d.cards.map(c => `
+    <button class="memoryCard soundPairCard ${c.kind === 'sound' ? 'soundCard' : ''}" data-card="${c.cardId}" data-kind="${c.kind}" data-char="${c.characterId}" data-group="${c.soundGroup}" data-slot="${c.imageSlot || 1}">
+      ${c.kind === 'image' ? `<img src="${c.image}" alt="">` : `<span class="soundCardIcon" aria-hidden="true">🔊</span>`}
+    </button>`).join('')}</div>`;
+  document.querySelectorAll('.soundPairCard').forEach(b => b.onclick = () => flipSoundCard(b));
+}
+
+async function flipSoundCard(btn) {
+  if (state.pairLocked || btn.classList.contains('matched') || btn.classList.contains('revealed')) return;
+  btn.classList.add('revealed');
+  state.pairOpen.push(btn);
+  if (btn.dataset.kind === 'sound') {
+    const card = state.current.cards.find(c => c.cardId === btn.dataset.card);
+    speakSound(card.soundUtterance);
+  }
+  if (state.pairOpen.length < 2) return;
+
+  state.pairLocked = true;
+  const [a,b] = state.pairOpen;
+  const isMatch = a.dataset.kind !== b.dataset.kind && a.dataset.group === b.dataset.group;
+  if (isMatch) {
+    a.classList.add('matched'); b.classList.add('matched');
+    state.pairMatched.add(a.dataset.card); state.pairMatched.add(b.dataset.card);
+    const imageCard = a.dataset.kind === 'image' ? a : b;
+    await postResult({
+      eventType:'sound_pair_match', characterId:imageCard.dataset.char,
+      selectedCharacterId:imageCard.dataset.char, imageSlot:Number(imageCard.dataset.slot), result:'correct'
+    });
+    state.pairOpen = [];
+    state.pairLocked = false;
+    if (state.pairMatched.size === state.current.cards.length) {
+      $('#feedback').textContent = '🎉 התאמת את כל הצלילים!';
+      show('#nextBtn');
+    }
+  } else {
+    setTimeout(() => {
+      stopAudio();
+      a.classList.remove('revealed'); b.classList.remove('revealed');
+      state.pairOpen = [];
+      state.pairLocked = false;
+    }, 850);
   }
 }
 
