@@ -209,16 +209,6 @@ async function flipCard(btn) {
   }
 }
 
-function speakSound(text) {
-  stopAudio();
-  if (!('speechSynthesis' in window)) return;
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'he-IL';
-  utterance.rate = .72;
-  utterance.pitch = 1;
-  speechSynthesis.speak(utterance);
-}
-
 function renderSoundPairs(d) {
   $('#prompt').textContent = 'התאם דמות לצליל 🔊';
   $('#gameStage').innerHTML = `<div class="memoryGrid soundMemoryGrid">${d.cards.map(c => `
@@ -234,7 +224,7 @@ async function flipSoundCard(btn) {
   state.pairOpen.push(btn);
   if (btn.dataset.kind === 'sound') {
     const card = state.current.cards.find(c => c.cardId === btn.dataset.card);
-    speakSound(card.soundUtterance);
+    playAudio(card.soundAudio);
   }
   if (state.pairOpen.length < 2) return;
 
@@ -367,9 +357,11 @@ function startEdit(c) {
   state.editId = c.id;
   $('#editCharacterId').value = c.id;
   $('#characterName').value = c.name;
+  $('#soundGroup').value = c.soundGroup || '';
   $('#saveCharacterBtn').textContent = 'שמור שינויים';
   show('#cancelEditBtn');
   $('#image1').required = false; $('#image2').required = false; $('#audioFile').required = false;
+  $('#soundRecordStatus').textContent = c.soundAudio ? 'יש הקלטת צליל ✅' : 'עדיין אין הקלטת צליל';
   window.scrollTo({top:0,behavior:'smooth'});
 }
 function resetEditForm() {
@@ -380,6 +372,7 @@ function resetEditForm() {
   show('#cancelEditBtn',false);
   $('#image1').required = true; $('#image2').required = true; $('#audioFile').required = true;
   $('#recordStatus').textContent = '';
+  $('#soundRecordStatus').textContent = '';
 }
 $('#cancelEditBtn').onclick = resetEditForm;
 
@@ -392,21 +385,24 @@ async function deleteCharacter(c) {
   await loadAdmin(); await refresh();
 }
 
-let recorder, chunks=[];
-$('#recordBtn').onclick = async () => {
+let recorder, chunks=[], recordingTarget=null;
+async function toggleRecording({button,fileInput,status,fileName}) {
   if (recorder?.state === 'recording') { recorder.stop(); return; }
   const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-  chunks=[]; recorder=new MediaRecorder(stream);
+  chunks=[]; recordingTarget={button,fileInput,status,fileName}; recorder=new MediaRecorder(stream);
   recorder.ondataavailable=e=>chunks.push(e.data);
   recorder.onstop=()=>{
     const blob=new Blob(chunks,{type:recorder.mimeType||'audio/webm'});
-    const file=new File([blob],'recording.webm',{type:blob.type});
-    const dt=new DataTransfer();dt.items.add(file);$('#audioFile').files=dt.files;
-    $('#recordStatus').textContent='ההקלטה מוכנה ✅';$('#recordBtn').textContent='🎙️ הקלט שוב';
+    const file=new File([blob],recordingTarget.fileName,{type:blob.type});
+    const dt=new DataTransfer();dt.items.add(file);recordingTarget.fileInput.files=dt.files;
+    recordingTarget.status.textContent='ההקלטה מוכנה ✅';recordingTarget.button.textContent='🎙️ הקלט שוב';
     stream.getTracks().forEach(t=>t.stop());
+    recordingTarget=null;
   };
-  recorder.start();$('#recordStatus').textContent='מקליט...';$('#recordBtn').textContent='⏹️ עצור';
-};
+  recorder.start();status.textContent='מקליט...';button.textContent='⏹️ עצור';
+}
+$('#recordBtn').onclick = () => toggleRecording({button:$('#recordBtn'),fileInput:$('#audioFile'),status:$('#recordStatus'),fileName:'name-recording.webm'});
+$('#soundRecordBtn').onclick = () => toggleRecording({button:$('#soundRecordBtn'),fileInput:$('#soundFile'),status:$('#soundRecordStatus'),fileName:'sound-recording.webm'});
 
 $('#characterForm').onsubmit = async e => {
   e.preventDefault();
