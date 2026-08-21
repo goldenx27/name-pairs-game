@@ -165,16 +165,20 @@ async function handleApi(request, env, url) {
     const parentPin=String(form.get('parentPin')||'');
     if (!(await verifyParentPin(env,familyId,parentPin))) return json({error:'wrong_pin'},403);
     const name=String(form.get('name')||'').trim();
-    const image1=form.get('image1'),image2=form.get('image2'),audio=form.get('audio');
+    const image1=form.get('image1'),image2=form.get('image2'),audio=form.get('audio'),soundAudio=form.get('soundAudio');
+    const soundGroup=String(form.get('soundGroup')||'').trim();
     if (!name || !(image1 instanceof File) || !(image2 instanceof File) || !(audio instanceof File)) return json({error:'name_two_images_and_audio_required'},400);
     const characterId=id('char'),base=`${GLOBAL_FAMILY_ID}/${characterId}`;
-    const k1=`${base}/image1`,k2=`${base}/image2`,ka=`${base}/audio`;
-    await Promise.all([
+    const k1=`${base}/image1`,k2=`${base}/image2`,ka=`${base}/audio`,ks=`${base}/sound`;
+    const uploads=[
       env.MEDIA.put(k1,image1.stream(),{httpMetadata:{contentType:image1.type||'image/jpeg'}}),
       env.MEDIA.put(k2,image2.stream(),{httpMetadata:{contentType:image2.type||'image/jpeg'}}),
       env.MEDIA.put(ka,audio.stream(),{httpMetadata:{contentType:audio.type||'audio/webm'}})
-    ]);
-    await env.DB.prepare(`INSERT INTO characters(id,family_id,name,image_1_key,image_2_key,audio_key) VALUES(?,?,?,?,?,?)`).bind(characterId,GLOBAL_FAMILY_ID,name,k1,k2,ka).run();
+    ];
+    const hasSound=soundAudio instanceof File&&soundAudio.size>0;
+    if(hasSound)uploads.push(env.MEDIA.put(ks,soundAudio.stream(),{httpMetadata:{contentType:soundAudio.type||'audio/webm'}}));
+    await Promise.all(uploads);
+    await env.DB.prepare(`INSERT INTO characters(id,family_id,name,image_1_key,image_2_key,audio_key,sound_audio_key,sound_group) VALUES(?,?,?,?,?,?,?,?)`).bind(characterId,GLOBAL_FAMILY_ID,name,k1,k2,ka,hasSound?ks:null,soundGroup||null).run();
     const players=await env.DB.prepare(`SELECT id FROM players`).all();
     for (const p of players.results) await env.DB.prepare(`INSERT OR IGNORE INTO player_character_state(player_id,character_id) VALUES(?,?)`).bind(p.id,characterId).run();
     return json({id:characterId,name},201);
@@ -189,13 +193,20 @@ async function handleApi(request, env, url) {
     const row=await env.DB.prepare(`SELECT * FROM characters WHERE id=? AND family_id=?`).bind(characterId,GLOBAL_FAMILY_ID).first();
     if (!row) return json({error:'character_not_found'},404);
     const name=String(form.get('name')||row.name).trim();
+    const soundGroup=String(form.get('soundGroup')||'').trim();
     for (const [field,key] of [['image1',row.image_1_key],['image2',row.image_2_key],['audio',row.audio_key]]) {
       const file=form.get(field);
       if (file instanceof File && file.size>0) {
         await env.MEDIA.put(key,file.stream(),{httpMetadata:{contentType:file.type||(field==='audio'?'audio/webm':'image/jpeg')}});
       }
     }
-    await env.DB.prepare(`UPDATE characters SET name=?,updated_at=? WHERE id=?`).bind(name,now(),characterId).run();
+    let soundAudioKey=row.sound_audio_key;
+    const soundAudio=form.get('soundAudio');
+    if(soundAudio instanceof File&&soundAudio.size>0){
+      soundAudioKey=soundAudioKey||`${GLOBAL_FAMILY_ID}/${characterId}/sound`;
+      await env.MEDIA.put(soundAudioKey,soundAudio.stream(),{httpMetadata:{contentType:soundAudio.type||'audio/webm'}});
+    }
+    await env.DB.prepare(`UPDATE characters SET name=?,sound_audio_key=?,sound_group=?,updated_at=? WHERE id=?`).bind(name,soundAudioKey,soundGroup||null,now(),characterId).run();
     return json({ok:true,id:characterId,name});
   }
 
@@ -204,7 +215,7 @@ async function handleApi(request, env, url) {
     if (!(await verifyParentPin(env,b.familyId,b.parentPin))) return json({error:'wrong_pin'},403);
     const row=await env.DB.prepare(`SELECT * FROM characters WHERE id=? AND family_id=?`).bind(charMatch[1],GLOBAL_FAMILY_ID).first();
     if (!row) return json({error:'character_not_found'},404);
-    await Promise.all([env.MEDIA.delete(row.image_1_key),env.MEDIA.delete(row.image_2_key),env.MEDIA.delete(row.audio_key)]);
+    await Promise.all([env.MEDIA.delete(row.image_1_key),env.MEDIA.delete(row.image_2_key),env.MEDIA.delete(row.audio_key),row.sound_audio_key?env.MEDIA.delete(row.sound_audio_key):Promise.resolve()]);
     await env.DB.prepare(`DELETE FROM characters WHERE id=?`).bind(row.id).run();
     return json({ok:true});
   }
