@@ -7,6 +7,17 @@ const id = (prefix) => `${prefix}_${crypto.randomUUID()}`;
 const now = () => new Date().toISOString();
 const GLOBAL_FAMILY_ID = 'catalog_global';
 
+function soundGroupForName(name) {
+  const normalized=String(name||'').trim().replaceAll('׳',"'");
+  if(['אבי',"אפצ'י"].includes(normalized))return 'haaa';
+  if(normalized==='סבתא שלומית')return 'sh';
+  if(normalized==='אילנית')return 'he';
+  if(normalized==='אורן')return 'o';
+  if(['אורי','אורים קטנים'].includes(normalized))return 'uow';
+  if(['אפרת','אפריים'].includes(normalized))return 'aee';
+  return null;
+}
+
 async function hashPin(pin) {
   const data = new TextEncoder().encode(String(pin));
   const digest = await crypto.subtle.digest('SHA-256', data);
@@ -86,7 +97,7 @@ async function playerSnapshot(env, playerId) {
     player: { id: player.id, family_id: player.family_id },
     hasParentPin: !!player.parent_pin_hash,
     state,
-    characters: chars.results.map(c => ({...c,image1:`/media/${c.id}/1`,image2:`/media/${c.id}/2`,audio:`/media/${c.id}/audio`,soundAudio:c.sound_audio_key?`/media/${c.id}/sound`:null,soundGroup:c.sound_group||null}))
+    characters: chars.results.map(c => ({...c,image1:`/media/${c.id}/1`,image2:`/media/${c.id}/2`,audio:`/media/${c.id}/audio`,soundAudio:c.sound_audio_key?`/media/${c.id}/sound`:null,soundGroup:c.sound_group||soundGroupForName(c.name)}))
   };
 }
 
@@ -156,7 +167,7 @@ async function handleApi(request, env, url) {
 
   if (request.method==='GET' && path==='/api/characters') {
     const rows=await env.DB.prepare(`SELECT id,name,enabled,priority,sound_audio_key,sound_group,created_at FROM characters WHERE family_id=? ORDER BY priority DESC,created_at ASC`).bind(GLOBAL_FAMILY_ID).all();
-    return json(rows.results.map(c=>({...c,image1:`/media/${c.id}/1`,image2:`/media/${c.id}/2`,audio:`/media/${c.id}/audio`,soundAudio:c.sound_audio_key?`/media/${c.id}/sound`:null,soundGroup:c.sound_group||null})));
+    return json(rows.results.map(c=>({...c,image1:`/media/${c.id}/1`,image2:`/media/${c.id}/2`,audio:`/media/${c.id}/audio`,soundAudio:c.sound_audio_key?`/media/${c.id}/sound`:null,soundGroup:c.sound_group||soundGroupForName(c.name)})));
   }
 
   if (request.method==='POST' && path==='/api/characters') {
@@ -166,7 +177,7 @@ async function handleApi(request, env, url) {
     if (!(await verifyParentPin(env,familyId,parentPin))) return json({error:'wrong_pin'},403);
     const name=String(form.get('name')||'').trim();
     const image1=form.get('image1'),image2=form.get('image2'),audio=form.get('audio'),soundAudio=form.get('soundAudio');
-    const soundGroup=String(form.get('soundGroup')||'').trim();
+    const soundGroup=String(form.get('soundGroup')||'').trim()||soundGroupForName(name);
     if (!name || !(image1 instanceof File) || !(image2 instanceof File) || !(audio instanceof File)) return json({error:'name_two_images_and_audio_required'},400);
     const characterId=id('char'),base=`${GLOBAL_FAMILY_ID}/${characterId}`;
     const k1=`${base}/image1`,k2=`${base}/image2`,ka=`${base}/audio`,ks=`${base}/sound`;
@@ -193,7 +204,7 @@ async function handleApi(request, env, url) {
     const row=await env.DB.prepare(`SELECT * FROM characters WHERE id=? AND family_id=?`).bind(characterId,GLOBAL_FAMILY_ID).first();
     if (!row) return json({error:'character_not_found'},404);
     const name=String(form.get('name')||row.name).trim();
-    const soundGroup=String(form.get('soundGroup')||'').trim();
+    const soundGroup=String(form.get('soundGroup')||'').trim()||soundGroupForName(name);
     for (const [field,key] of [['image1',row.image_1_key],['image2',row.image_2_key],['audio',row.audio_key]]) {
       const file=form.get(field);
       if (file instanceof File && file.size>0) {
