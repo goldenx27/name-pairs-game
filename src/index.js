@@ -260,7 +260,9 @@ async function handleApi(request, env, url) {
     const active=snap.characters.filter(c=>c.status!=='hidden');
     if (active.length<2) return json({type:'waiting_for_characters',characters:active});
     const lastType=snap.state?.last_game_type;
-    const soundCharacters=active.filter(c=>c.soundAudio&&c.soundGroup);
+    // Sound matching is a separate activity and must not depend on which
+    // characters the child's adaptive progression has unlocked.
+    const soundCharacters=snap.characters.filter(c=>c.soundAudio&&c.soundGroup);
     const requestedType=url.searchParams.get('type');
     const availableTypes=['find_character','who_is_it','pairs'];
     if(soundCharacters.length>=2)availableTypes.push('sound_pairs');

@@ -122,7 +122,7 @@ async function nextRound() {
   }
   if (d.type === 'waiting_for_sounds') {
     $('#prompt').textContent = 'צריך לפחות שתי הקלטות צליל 🎙️';
-    $('#gameStage').innerHTML = `<div class="soundWaiting">נמצאו ${d.recordedSoundCount||0} דמויות פעילות עם צליל</div>`;
+    $('#gameStage').innerHTML = `<div class="soundWaiting">נמצאו ${d.recordedSoundCount||0} דמויות עם צליל</div>`;
     return;
   }
   if (d.type === 'find_character') return renderFind(d);
