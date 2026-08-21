@@ -7,6 +7,23 @@ const id = (prefix) => `${prefix}_${crypto.randomUUID()}`;
 const now = () => new Date().toISOString();
 const GLOBAL_FAMILY_ID = 'catalog_global';
 
+const CHARACTER_SOUNDS = new Map([
+  ['אבי', { group: 'haaa', utterance: 'הההה' }],
+  ["אפצ'י", { group: 'haaa', utterance: 'הההה' }],
+  ['אפצ׳י', { group: 'haaa', utterance: 'הההה' }],
+  ['סבתא שלומית', { group: 'sh', utterance: 'ששש' }],
+  ['אילנית', { group: 'he', utterance: 'הֶה' }],
+  ['אורן', { group: 'o', utterance: 'אוֹ' }],
+  ['אורי', { group: 'uow', utterance: 'אוּוֹ' }],
+  ['אורים קטנים', { group: 'uow', utterance: 'אוּוֹ' }],
+  ['אפרת', { group: 'aee', utterance: 'אַאִי' }],
+  ['אפריים', { group: 'aee', utterance: 'אַאִי' }]
+]);
+
+function characterSound(name) {
+  return CHARACTER_SOUNDS.get(String(name || '').trim()) || null;
+}
+
 async function hashPin(pin) {
   const data = new TextEncoder().encode(String(pin));
   const digest = await crypto.subtle.digest('SHA-256', data);
@@ -90,8 +107,9 @@ async function playerSnapshot(env, playerId) {
   };
 }
 
-function chooseGameType(lastType, activeCount) {
+function chooseGameType(lastType, activeCount, soundCount) {
   const types = activeCount >= 2 ? ['find_character','who_is_it','pairs'] : ['find_character'];
+  if (soundCount >= 2) types.push('sound_pairs');
   const available = types.filter(t => t !== lastType);
   return available[Math.floor(Math.random() * available.length)] || types[0];
 }
@@ -248,7 +266,8 @@ async function handleApi(request, env, url) {
     const active=snap.characters.filter(c=>c.status!=='hidden');
     if (active.length<2) return json({type:'waiting_for_characters',characters:active});
     const lastType=snap.state?.last_game_type;
-    const gameType=chooseGameType(lastType,active.length);
+    const soundCharacters=active.filter(c=>characterSound(c.name));
+    const gameType=chooseGameType(lastType,active.length,soundCharacters.length);
     await env.DB.prepare(`UPDATE player_state SET last_game_type=?,updated_at=? WHERE player_id=?`).bind(gameType,now(),playerId).run();
 
     const sorted=[...active].sort((a,b)=>(a.score-b.score)||(a.times_shown-b.times_shown));
@@ -259,6 +278,19 @@ async function handleApi(request, env, url) {
 
     if (gameType==='find_character') return json({type:gameType,target,imageSlot,options:[target,...others].sort(()=>Math.random()-.5)});
     if (gameType==='who_is_it') return json({type:gameType,target,imageSlot,options:[target,...others].sort(()=>Math.random()-.5)});
+
+    if (gameType==='sound_pairs') {
+      const selected=[...soundCharacters].sort(()=>Math.random()-.5).slice(0,Math.min(3,soundCharacters.length));
+      const cards=selected.flatMap(c=>{
+        const sound=characterSound(c.name);
+        const imageSlot=Math.random()<.5?1:2;
+        return [
+          {cardId:`${c.id}_image`,kind:'image',characterId:c.id,image:imageSlot===1?c.image1:c.image2,name:c.name,imageSlot,soundGroup:sound.group},
+          {cardId:`${c.id}_sound`,kind:'sound',characterId:c.id,name:c.name,soundGroup:sound.group,soundUtterance:sound.utterance}
+        ];
+      }).sort(()=>Math.random()-.5);
+      return json({type:'sound_pairs',cards});
+    }
 
     const pairChars=[...active].sort(()=>Math.random()-.5).slice(0,Math.min(3,active.length));
     const cards=pairChars.flatMap(c=>[
