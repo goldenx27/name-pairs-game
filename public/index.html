@@ -22,7 +22,7 @@
   <main class="app">
     <header><h1>✨ החבורה שלי</h1><div class="headerActions"><button id="installAppBtn" class="ghost hidden">📲 התקן</button><button id="modeBtn" class="ghost">🔒 ניהול</button></div></header>
     <section id="setup" class="card hidden"><h2>מתחילים 🎮</h2><p>בחרו קוד הורה בן 4–6 ספרות. זה הדבר היחיד שצריך להגדיר.</p><input id="newPin" inputmode="numeric" maxlength="6" placeholder="קוד הורה" /><button id="bootstrapBtn" class="primary">התחל משחק</button></section>
-    <section id="game" class="card hidden"><div class="gameTop"><h2 id="prompt">מי כאן?</h2><button id="playAgain" class="ghost hidden">🔊 שוב</button></div><div id="gameStage"></div><div id="feedback" class="feedback"></div><button id="nextBtn" class="primary hidden">הבא 🎲</button></section>
+    <section id="game" class="card hidden"><div id="gameModePicker" class="gameModePicker" aria-label="בחירת משחק"><button type="button" data-mode="mixed">🎲 אקראי</button><button type="button" data-mode="find_character">👀 איפה?</button><button type="button" data-mode="who_is_it">👂 מי זה?</button><button type="button" data-mode="pairs">🎴 זוגות</button><button type="button" data-mode="sound_pairs">🔗 דמות וצליל</button></div><div class="gameTop"><h2 id="prompt">מי כאן?</h2><button id="playAgain" class="ghost hidden">🔊 שוב</button></div><div id="gameStage"></div><div id="feedback" class="feedback"></div><button id="nextBtn" class="primary hidden">הבא 🎲</button></section>
     <section id="crew" class="card hidden"><div class="sectionTitle"><h2>👥 החבורה הגדולה</h2><span id="crewProgress" class="pill"></span></div><div id="crewGrid" class="crew"></div></section>
     <section id="parent" class="card hidden">
       <div class="accessTop adminSectionTop">

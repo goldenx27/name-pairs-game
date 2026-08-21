@@ -11,6 +11,7 @@ const state = {
   pairLocked: false,
   pairMatched: new Set(),
   soundConnections: [],
+  selectedGameType: localStorage.gameMode || 'mixed',
   repeatPrompt: null
 };
 
@@ -44,6 +45,7 @@ function speakHebrew(text,fallbackAudio){
 }
 
 async function init() {
+  setupGameModePicker();
   if (!state.familyId || !state.playerId) {
     show('#setup');
     return;
@@ -52,6 +54,18 @@ async function init() {
   show('#crew');
   await refresh();
   await nextRound();
+}
+
+function setupGameModePicker() {
+  const buttons=[...document.querySelectorAll('#gameModePicker [data-mode]')];
+  const render=()=>buttons.forEach(button=>button.classList.toggle('selected',button.dataset.mode===state.selectedGameType));
+  buttons.forEach(button=>button.onclick=async()=>{
+    state.selectedGameType=button.dataset.mode;
+    localStorage.gameMode=state.selectedGameType;
+    render();
+    if(state.playerId)await nextRound();
+  });
+  render();
 }
 
 async function refresh() {
@@ -92,7 +106,9 @@ async function nextRound() {
   show('#playAgain', false);
   $('#feedback').textContent = '';
   $('#gameStage').innerHTML = '';
-  const d = await api(`/api/game/next?playerId=${state.playerId}`);
+  const params=new URLSearchParams({playerId:state.playerId});
+  if(state.selectedGameType!=='mixed')params.set('type',state.selectedGameType);
+  const d = await api(`/api/game/next?${params}`);
   state.current = d;
   state.repeatPrompt = null;
   state.pairOpen = [];
@@ -102,6 +118,11 @@ async function nextRound() {
 
   if (d.type === 'waiting_for_characters') {
     $('#prompt').textContent = 'החבורה עוד מתארגנת 🙂';
+    return;
+  }
+  if (d.type === 'waiting_for_sounds') {
+    $('#prompt').textContent = 'צריך לפחות שתי הקלטות צליל 🎙️';
+    $('#gameStage').innerHTML = `<div class="soundWaiting">נמצאו ${d.recordedSoundCount||0} דמויות פעילות עם צליל</div>`;
     return;
   }
   if (d.type === 'find_character') return renderFind(d);
