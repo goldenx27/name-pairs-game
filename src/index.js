@@ -250,7 +250,11 @@ async function handleApi(request, env, url) {
     if (active.length<2) return json({type:'waiting_for_characters',characters:active});
     const lastType=snap.state?.last_game_type;
     const soundCharacters=active.filter(c=>c.soundAudio&&c.soundGroup);
-    const gameType=chooseGameType(lastType,active.length,soundCharacters.length);
+    const requestedType=url.searchParams.get('type');
+    const availableTypes=['find_character','who_is_it','pairs'];
+    if(soundCharacters.length>=2)availableTypes.push('sound_pairs');
+    if(requestedType==='sound_pairs'&&soundCharacters.length<2)return json({type:'waiting_for_sounds',recordedSoundCount:soundCharacters.length});
+    const gameType=availableTypes.includes(requestedType)?requestedType:chooseGameType(lastType,active.length,soundCharacters.length);
     await env.DB.prepare(`UPDATE player_state SET last_game_type=?,updated_at=? WHERE player_id=?`).bind(gameType,now(),playerId).run();
 
     const sorted=[...active].sort((a,b)=>(a.score-b.score)||(a.times_shown-b.times_shown));
