@@ -21,9 +21,10 @@ async function listAllObjects(bucket) {
 }
 
 async function storageAudit(env) {
-  const rows=await env.DB.prepare(`SELECT id,name,family_id,enabled,image_1_key,image_2_key,audio_key FROM characters ORDER BY created_at ASC`).all();
+  const rows=await env.DB.prepare(`SELECT id,name,family_id,enabled,image_1_key,image_2_key,audio_key,sound_audio_key FROM characters ORDER BY created_at ASC`).all();
   const referenced=new Map();
   for(const c of rows.results) for(const [kind,key] of [['image1',c.image_1_key],['image2',c.image_2_key],['audio',c.audio_key]]) if(key) referenced.set(key,{characterId:c.id,name:c.name,kind,enabled:c.enabled,familyId:c.family_id,source:'character'});
+  for(const c of rows.results) if(c.sound_audio_key) referenced.set(c.sound_audio_key,{characterId:c.id,name:c.name,kind:'soundAudio',enabled:c.enabled,familyId:c.family_id,source:'character'});
 
   // Speech practice media lives in the same R2 bucket and must NEVER be treated as orphaned.
   const speechRows=await env.DB.prepare(`SELECT id,title,enabled,image_key,prompt_audio_key FROM speech_items`).all().catch(()=>({results:[]}));
@@ -39,8 +40,8 @@ async function storageAudit(env) {
   const orphaned=objects.filter(o=>!referenced.has(o.key));
   const referencedObjects=objects.filter(o=>referenced.has(o.key));
   const characters=rows.results.map(c=>{
-    const keys=[c.image_1_key,c.image_2_key,c.audio_key].filter(Boolean),present=keys.filter(k=>objectMap.has(k)).length;
-    return {id:c.id,name:c.name,enabled:!!c.enabled,familyId:c.family_id,expectedFiles:keys.length,presentFiles:present,complete:present===keys.length,files:{image1:c.image_1_key?objectMap.has(c.image_1_key):false,image2:c.image_2_key?objectMap.has(c.image_2_key):false,audio:c.audio_key?objectMap.has(c.audio_key):false}};
+    const keys=[c.image_1_key,c.image_2_key,c.audio_key,c.sound_audio_key].filter(Boolean),present=keys.filter(k=>objectMap.has(k)).length;
+    return {id:c.id,name:c.name,enabled:!!c.enabled,familyId:c.family_id,expectedFiles:keys.length,presentFiles:present,complete:present===keys.length,files:{image1:c.image_1_key?objectMap.has(c.image_1_key):false,image2:c.image_2_key?objectMap.has(c.image_2_key):false,audio:c.audio_key?objectMap.has(c.audio_key):false,soundAudio:c.sound_audio_key?objectMap.has(c.sound_audio_key):false}};
   });
   return {generatedAt:now(),summary:{characters:characters.length,completeCharacters:characters.filter(c=>c.complete).length,speechItems:(speechRows.results||[]).length,speechAttempts:(attemptRows.results||[]).length,r2Objects:objects.length,referencedObjects:referencedObjects.length,orphanedObjects:orphaned.length,missingObjects:missing.length,totalBytes:objects.reduce((n,o)=>n+o.size,0),referencedBytes:referencedObjects.reduce((n,o)=>n+o.size,0),orphanedBytes:orphaned.reduce((n,o)=>n+o.size,0)},characters,missing,orphaned};
 }
@@ -66,15 +67,17 @@ async function handleAdminMedia(request,env,url){
 
   if(request.method==='POST'&&!match[1]){
     const form=await request.formData();
-    const name=String(form.get('name')||'').trim(),image1=form.get('image1'),image2=form.get('image2'),audio=form.get('audio');
+    const name=String(form.get('name')||'').trim(),soundGroup=String(form.get('soundGroup')||'').trim()||null,image1=form.get('image1'),image2=form.get('image2'),audio=form.get('audio'),soundAudio=form.get('soundAudio');
     if(!name||!(image1 instanceof File)||!image1.size||!(image2 instanceof File)||!image2.size||!(audio instanceof File)||!audio.size)return json({error:'name_two_images_and_audio_required'},400);
-    const characterId=id('char'),base=`${GLOBAL_FAMILY_ID}/${characterId}`,k1=`${base}/image1`,k2=`${base}/image2`,ka=`${base}/audio`;
-    await Promise.all([
+    const characterId=id('char'),base=`${GLOBAL_FAMILY_ID}/${characterId}`,k1=`${base}/image1`,k2=`${base}/image2`,ka=`${base}/audio`,ks=soundAudio instanceof File&&soundAudio.size?`${base}/sound`:null;
+    const uploads=[
       env.MEDIA.put(k1,image1.stream(),{httpMetadata:{contentType:image1.type||'image/jpeg'}}),
       env.MEDIA.put(k2,image2.stream(),{httpMetadata:{contentType:image2.type||'image/jpeg'}}),
       env.MEDIA.put(ka,audio.stream(),{httpMetadata:{contentType:audio.type||'audio/webm'}})
-    ]);
-    await env.DB.prepare(`INSERT INTO characters(id,family_id,name,image_1_key,image_2_key,audio_key) VALUES(?,?,?,?,?,?)`).bind(characterId,GLOBAL_FAMILY_ID,name,k1,k2,ka).run();
+    ];
+    if(ks)uploads.push(env.MEDIA.put(ks,soundAudio.stream(),{httpMetadata:{contentType:soundAudio.type||'audio/webm'}}));
+    await Promise.all(uploads);
+    await env.DB.prepare(`INSERT INTO characters(id,family_id,name,image_1_key,image_2_key,audio_key,sound_audio_key,sound_group) VALUES(?,?,?,?,?,?,?,?)`).bind(characterId,GLOBAL_FAMILY_ID,name,k1,k2,ka,ks,soundGroup).run();
     const players=await env.DB.prepare(`SELECT id FROM players`).all();
     for(const p of players.results)await env.DB.prepare(`INSERT OR IGNORE INTO player_character_state(player_id,character_id) VALUES(?,?)`).bind(p.id,characterId).run();
     return json({id:characterId,name},201);
@@ -85,15 +88,17 @@ async function handleAdminMedia(request,env,url){
   if(!row)return json({error:'character_not_found'},404);
 
   if(request.method==='PATCH'){
-    const form=await request.formData(),name=String(form.get('name')||row.name).trim();
+    const form=await request.formData(),name=String(form.get('name')||row.name).trim(),soundGroup=form.has('soundGroup')?(String(form.get('soundGroup')||'').trim()||null):row.sound_group;
     for(const [field,key,fallback] of [['image1',row.image_1_key,'image/jpeg'],['image2',row.image_2_key,'image/jpeg'],['audio',row.audio_key,'audio/webm']]){
       const file=form.get(field);if(file instanceof File&&file.size>0)await env.MEDIA.put(key,file.stream(),{httpMetadata:{contentType:file.type||fallback}});
     }
-    await env.DB.prepare(`UPDATE characters SET name=?,updated_at=? WHERE id=?`).bind(name,now(),characterId).run();
+    const soundAudio=form.get('soundAudio');let soundKey=row.sound_audio_key;
+    if(soundAudio instanceof File&&soundAudio.size){soundKey=soundKey||`${GLOBAL_FAMILY_ID}/${characterId}/sound`;await env.MEDIA.put(soundKey,soundAudio.stream(),{httpMetadata:{contentType:soundAudio.type||'audio/webm'}});}
+    await env.DB.prepare(`UPDATE characters SET name=?,sound_audio_key=?,sound_group=?,updated_at=? WHERE id=?`).bind(name,soundKey,soundGroup,now(),characterId).run();
     return json({ok:true,id:characterId,name});
   }
 
-  await Promise.all([env.MEDIA.delete(row.image_1_key),env.MEDIA.delete(row.image_2_key),env.MEDIA.delete(row.audio_key)]);
+  await Promise.all([env.MEDIA.delete(row.image_1_key),env.MEDIA.delete(row.image_2_key),env.MEDIA.delete(row.audio_key),row.sound_audio_key?env.MEDIA.delete(row.sound_audio_key):Promise.resolve()]);
   await env.DB.prepare(`DELETE FROM characters WHERE id=?`).bind(characterId).run();
   return json({ok:true});
 }
