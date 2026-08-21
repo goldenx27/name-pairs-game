@@ -7,23 +7,6 @@ const id = (prefix) => `${prefix}_${crypto.randomUUID()}`;
 const now = () => new Date().toISOString();
 const GLOBAL_FAMILY_ID = 'catalog_global';
 
-const CHARACTER_SOUNDS = new Map([
-  ['אבי', { group: 'haaa', utterance: 'הההה' }],
-  ["אפצ'י", { group: 'haaa', utterance: 'הההה' }],
-  ['אפצ׳י', { group: 'haaa', utterance: 'הההה' }],
-  ['סבתא שלומית', { group: 'sh', utterance: 'ששש' }],
-  ['אילנית', { group: 'he', utterance: 'הֶה' }],
-  ['אורן', { group: 'o', utterance: 'אוֹ' }],
-  ['אורי', { group: 'uow', utterance: 'אוּוֹ' }],
-  ['אורים קטנים', { group: 'uow', utterance: 'אוּוֹ' }],
-  ['אפרת', { group: 'aee', utterance: 'אַאִי' }],
-  ['אפריים', { group: 'aee', utterance: 'אַאִי' }]
-]);
-
-function characterSound(name) {
-  return CHARACTER_SOUNDS.get(String(name || '').trim()) || null;
-}
-
 async function hashPin(pin) {
   const data = new TextEncoder().encode(String(pin));
   const digest = await crypto.subtle.digest('SHA-256', data);
@@ -93,7 +76,7 @@ async function playerSnapshot(env, playerId) {
   const player = await env.DB.prepare(`SELECT p.*,f.parent_pin_hash FROM players p JOIN families f ON f.id=p.family_id WHERE p.id=?`).bind(playerId).first();
   if (!player) return null;
   const chars = await env.DB.prepare(`
-    SELECT c.id,c.name,c.priority,pcs.status,pcs.times_shown,pcs.correct_count,pcs.wrong_count,pcs.score,c.created_at
+    SELECT c.id,c.name,c.priority,c.sound_audio_key,c.sound_group,pcs.status,pcs.times_shown,pcs.correct_count,pcs.wrong_count,pcs.score,c.created_at
     FROM player_character_state pcs JOIN characters c ON c.id=pcs.character_id
     WHERE pcs.player_id=? AND c.enabled=1
     ORDER BY c.priority DESC,c.created_at ASC
@@ -103,7 +86,7 @@ async function playerSnapshot(env, playerId) {
     player: { id: player.id, family_id: player.family_id },
     hasParentPin: !!player.parent_pin_hash,
     state,
-    characters: chars.results.map(c => ({...c,image1:`/media/${c.id}/1`,image2:`/media/${c.id}/2`,audio:`/media/${c.id}/audio`}))
+    characters: chars.results.map(c => ({...c,image1:`/media/${c.id}/1`,image2:`/media/${c.id}/2`,audio:`/media/${c.id}/audio`,soundAudio:c.sound_audio_key?`/media/${c.id}/sound`:null,soundGroup:c.sound_group||null}))
   };
 }
 
@@ -172,8 +155,8 @@ async function handleApi(request, env, url) {
   }
 
   if (request.method==='GET' && path==='/api/characters') {
-    const rows=await env.DB.prepare(`SELECT id,name,enabled,priority,created_at FROM characters WHERE family_id=? ORDER BY priority DESC,created_at ASC`).bind(GLOBAL_FAMILY_ID).all();
-    return json(rows.results.map(c=>({...c,image1:`/media/${c.id}/1`,image2:`/media/${c.id}/2`,audio:`/media/${c.id}/audio`})));
+    const rows=await env.DB.prepare(`SELECT id,name,enabled,priority,sound_audio_key,sound_group,created_at FROM characters WHERE family_id=? ORDER BY priority DESC,created_at ASC`).bind(GLOBAL_FAMILY_ID).all();
+    return json(rows.results.map(c=>({...c,image1:`/media/${c.id}/1`,image2:`/media/${c.id}/2`,audio:`/media/${c.id}/audio`,soundAudio:c.sound_audio_key?`/media/${c.id}/sound`:null,soundGroup:c.sound_group||null})));
   }
 
   if (request.method==='POST' && path==='/api/characters') {
@@ -266,7 +249,7 @@ async function handleApi(request, env, url) {
     const active=snap.characters.filter(c=>c.status!=='hidden');
     if (active.length<2) return json({type:'waiting_for_characters',characters:active});
     const lastType=snap.state?.last_game_type;
-    const soundCharacters=active.filter(c=>characterSound(c.name));
+    const soundCharacters=active.filter(c=>c.soundAudio&&c.soundGroup);
     const gameType=chooseGameType(lastType,active.length,soundCharacters.length);
     await env.DB.prepare(`UPDATE player_state SET last_game_type=?,updated_at=? WHERE player_id=?`).bind(gameType,now(),playerId).run();
 
@@ -282,11 +265,10 @@ async function handleApi(request, env, url) {
     if (gameType==='sound_pairs') {
       const selected=[...soundCharacters].sort(()=>Math.random()-.5).slice(0,Math.min(3,soundCharacters.length));
       const cards=selected.flatMap(c=>{
-        const sound=characterSound(c.name);
-        const imageSlot=Math.random()<.5?1:2;
+        const imageSlot=1;
         return [
-          {cardId:`${c.id}_image`,kind:'image',characterId:c.id,image:imageSlot===1?c.image1:c.image2,name:c.name,imageSlot,soundGroup:sound.group},
-          {cardId:`${c.id}_sound`,kind:'sound',characterId:c.id,name:c.name,soundGroup:sound.group,soundUtterance:sound.utterance}
+          {cardId:`${c.id}_image`,kind:'image',characterId:c.id,image:c.image1,name:c.name,imageSlot,soundGroup:c.soundGroup},
+          {cardId:`${c.id}_sound`,kind:'sound',characterId:c.id,name:c.name,soundGroup:c.soundGroup,soundAudio:c.soundAudio}
         ];
       }).sort(()=>Math.random()-.5);
       return json({type:'sound_pairs',cards});
@@ -304,11 +286,12 @@ async function handleApi(request, env, url) {
 }
 
 async function serveMedia(request,env,url) {
-  const m=url.pathname.match(/^\/media\/([^/]+)\/(1|2|audio)$/);
+  const m=url.pathname.match(/^\/media\/([^/]+)\/(1|2|audio|sound)$/);
   if (!m) return new Response('Not found',{status:404});
-  const row=await env.DB.prepare(`SELECT image_1_key,image_2_key,audio_key FROM characters WHERE id=? AND enabled=1`).bind(m[1]).first();
+  const row=await env.DB.prepare(`SELECT image_1_key,image_2_key,audio_key,sound_audio_key FROM characters WHERE id=? AND enabled=1`).bind(m[1]).first();
   if (!row) return new Response('Not found',{status:404});
-  const key=m[2]==='1'?row.image_1_key:m[2]==='2'?row.image_2_key:row.audio_key;
+  const key=m[2]==='1'?row.image_1_key:m[2]==='2'?row.image_2_key:m[2]==='sound'?row.sound_audio_key:row.audio_key;
+  if (!key) return new Response('Not found',{status:404});
   const obj=await env.MEDIA.get(key);
   if (!obj) return new Response('Not found',{status:404});
   const headers=new Headers();obj.writeHttpMetadata(headers);headers.set('etag',obj.httpEtag);headers.set('cache-control','private, max-age=3600');
