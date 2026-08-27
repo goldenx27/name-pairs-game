@@ -1,28 +1,9 @@
 (()=>{
 const HOUSE_NAMES=['אבי',"אפצ'י",'אפריים','אפרת','אילנית','אורן','אורים קטנים','סבתא שלומית','אורי'];
 const NIQQUD={
- 'אבי':{name:'פתח',kind:'patah'},
- "אפצ'י":{name:'קמץ',kind:'qamats'},
- 'אפרת':{name:'צירה',kind:'tsere'},
- 'אפריים':{name:'סגול',kind:'segol'},
- 'אילנית':{name:'חיריק',kind:'hiriq'},
- 'אורים קטנים':{name:'קובוץ',kind:'qubuts'},
- 'אורי':{name:'שורוק',kind:'shuruk'},
- 'סבתא שלומית':{name:'שווא',kind:'sheva'},
- 'אורן':{name:'חולם',kind:'holam'}
-};
+ 'אבי':{name:'פתח',kind:'patah'},"אפצ'י":{name:'קמץ',kind:'qamats'},'אפרת':{name:'צירה',kind:'tsere'},'אפריים':{name:'סגול',kind:'segol'},'אילנית':{name:'חיריק',kind:'hiriq'},'אורים קטנים':{name:'קובוץ',kind:'qubuts'},'אורי':{name:'שורוק',kind:'shuruk'},'סבתא שלומית':{name:'שווא',kind:'sheva'},'אורן':{name:'חולם',kind:'holam'}};
 const norm=s=>String(s||'').trim().replaceAll('׳',"'");
-const niqqudSvg=kind=>({
- patah:'<path d="M72 87 H108"/>',
- qamats:'<path d="M72 84 H108 M90 84 V99"/>',
- tsere:'<circle cx="80" cy="90" r="5"/><circle cx="100" cy="90" r="5"/>',
- segol:'<circle cx="78" cy="85" r="5"/><circle cx="102" cy="85" r="5"/><circle cx="90" cy="100" r="5"/>',
- hiriq:'<circle cx="90" cy="93" r="5"/>',
- qubuts:'<circle cx="80" cy="80" r="4.5"/><circle cx="90" cy="90" r="4.5"/><circle cx="100" cy="100" r="4.5"/>',
- shuruk:'<path d="M86 72 V101"/><circle cx="101" cy="86" r="5"/>',
- sheva:'<circle cx="90" cy="84" r="5"/><circle cx="90" cy="100" r="5"/>',
- holam:'<circle cx="90" cy="80" r="5"/>'
-}[kind]||'');
+const niqqudSvg=kind=>({patah:'<path d="M72 87 H108"/>',qamats:'<path d="M72 84 H108 M90 84 V99"/>',tsere:'<circle cx="80" cy="90" r="5"/><circle cx="100" cy="90" r="5"/>',segol:'<circle cx="78" cy="85" r="5"/><circle cx="102" cy="85" r="5"/><circle cx="90" cy="100" r="5"/>',hiriq:'<circle cx="90" cy="93" r="5"/>',qubuts:'<circle cx="80" cy="80" r="4.5"/><circle cx="90" cy="90" r="4.5"/><circle cx="100" cy="100" r="4.5"/>',shuruk:'<path d="M86 72 V101"/><circle cx="101" cy="86" r="5"/>',sheva:'<circle cx="90" cy="84" r="5"/><circle cx="90" cy="100" r="5"/>',holam:'<circle cx="90" cy="80" r="5"/>'}[kind]||'');
 const houseSvg=name=>{const n=NIQQUD[norm(name)]||{name:'ניקוד',kind:''};return `<svg viewBox="0 0 180 150" role="img" aria-label="הבית של ${name}, ${n.name}"><path d="M12 63 L90 10 L168 63 L151 64 L151 140 L29 140 L29 64 Z" fill="#fffaf0" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/><path d="M12 63 L90 10 L168 63 Z" fill="#ff4b36" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/><g class="houseNiqqudShape" fill="#20222a" stroke="#20222a" stroke-width="6" stroke-linecap="round">${niqqudSvg(n.kind)}</g><rect x="76" y="101" width="28" height="39" rx="3" fill="#f6d08a" stroke="currentColor" stroke-width="5"/></svg>`};
 function shuffle(a){return [...a].sort(()=>Math.random()-.5)}
 function markPickerSelected(){document.querySelectorAll('#gameModePicker button').forEach(x=>x.classList.toggle('selected',x.dataset.mode==='house_pairs'));}
@@ -33,20 +14,17 @@ async function start(){
  const chars=(snap.characters||[]).filter(c=>c.status!=='hidden'&&HOUSE_NAMES.includes(norm(c.name)));
  const stage=document.querySelector('#gameStage'),prompt=document.querySelector('#prompt'),feedback=document.querySelector('#feedback');
  if(!stage)return;if(chars.length<2){prompt.textContent='צריך לפחות שתי דמויות למשחק הבתים 🏠';stage.innerHTML='';return;}
- document.querySelector('#playAgain')?.classList.add('hidden');
- prompt.textContent='חברו כל דמות לבית שלה 🏠';feedback.textContent='';document.querySelector('#nextBtn')?.classList.add('hidden');
+ document.querySelector('#playAgain')?.classList.add('hidden');prompt.textContent='חברו כל דמות לבית שלה 🏠';feedback.textContent='';document.querySelector('#nextBtn')?.classList.add('hidden');
  const chosen=shuffle(chars).slice(0,Math.min(4,chars.length)),houses=shuffle(chosen);
  stage.innerHTML=`<div class="housePairsBoard"><svg class="housePairLines"><path class="houseDraftLine"/></svg><div class="houseCharacters">${chosen.map(c=>`<button class="houseCharacter" data-id="${c.id}" data-name="${norm(c.name)}"><img src="${c.image1}" alt="${c.name}"><span>${c.name}</span><i></i></button>`).join('')}</div><div class="houseTargets">${houses.map(c=>`<button class="houseTarget" data-id="${c.id}" data-name="${norm(c.name)}">${houseSvg(norm(c.name))}<i></i></button>`).join('')}</div></div>`;
  let matched=0,drag=null;const board=stage.querySelector('.housePairsBoard'),svg=board.querySelector('.housePairLines'),draft=svg.querySelector('.houseDraftLine');
- const center=(el,br)=>{const r=el.getBoundingClientRect();return{x:r.left+r.width/2-br.left,y:r.top+r.height/2-br.top}};
- const curve=(a,b)=>`M${a.x} ${a.y} C${a.x-55} ${a.y},${b.x+55} ${b.y},${b.x} ${b.y}`;
+ const center=(el,br)=>{const r=el.getBoundingClientRect();return{x:r.left+r.width/2-br.left,y:r.top+r.height/2-br.top}};const curve=(a,b)=>`M${a.x} ${a.y} C${a.x-55} ${a.y},${b.x+55} ${b.y},${b.x} ${b.y}`;
  const redraw=()=>{const br=board.getBoundingClientRect();svg.querySelectorAll('.houseSavedLine').forEach(x=>x.remove());board.querySelectorAll('.houseCharacter.matched').forEach(a=>{const b=board.querySelector(`.houseTarget[data-id="${a.dataset.id}"]`);if(!b)return;const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('class','houseSavedLine');p.setAttribute('d',curve(center(a.querySelector('i'),br),center(b.querySelector('i'),br)));svg.insertBefore(p,draft)});};
  const stopDrag=()=>{if(!drag)return;drag.card.classList.remove('selected');draft.classList.remove('active');drag=null;};
- board.querySelectorAll('.houseCharacter').forEach(card=>{const handle=card.querySelector('i');handle.addEventListener('pointerdown',e=>{if(card.classList.contains('matched'))return;e.preventDefault();e.stopPropagation();handle.setPointerCapture?.(e.pointerId);card.classList.add('selected');const br=board.getBoundingClientRect();drag={card,start:center(handle,br),pointerId:e.pointerId};draft.classList.add('active');draft.setAttribute('d',curve(drag.start,{x:e.clientX-br.left,y:e.clientY-br.top}));});handle.addEventListener('pointermove',e=>{if(!drag||drag.pointerId!==e.pointerId)return;const br=board.getBoundingClientRect();draft.setAttribute('d',curve(drag.start,{x:e.clientX-br.left,y:e.clientY-br.top}));});handle.addEventListener('pointerup',e=>{if(!drag||drag.pointerId!==e.pointerId)return;const target=document.elementFromPoint(e.clientX,e.clientY)?.closest?.('.houseTarget');const card=drag.card;if(target&&!target.classList.contains('matched')&&target.dataset.id===card.dataset.id){card.classList.add('matched');target.classList.add('matched');matched++;feedback.textContent='✨ נכון!';stopDrag();redraw();if(matched===chosen.length){feedback.textContent='🎉 מצאתם את כל הבתים!';document.querySelector('#nextBtn')?.classList.remove('hidden');}}else{if(target){target.classList.add('wrong');setTimeout(()=>target.classList.remove('wrong'),450);feedback.textContent='🙂 נסו בית אחר';}stopDrag();}});handle.addEventListener('pointercancel',stopDrag);});
- window.addEventListener('resize',redraw,{once:true});
+ board.querySelectorAll('.houseCharacter').forEach(card=>{const handle=card.querySelector('i');handle.addEventListener('pointerdown',e=>{if(card.classList.contains('matched'))return;e.preventDefault();e.stopPropagation();handle.setPointerCapture?.(e.pointerId);card.classList.add('selected');const br=board.getBoundingClientRect();drag={card,start:center(handle,br),pointerId:e.pointerId};draft.classList.add('active');draft.setAttribute('d',curve(drag.start,{x:e.clientX-br.left,y:e.clientY-br.top}));});handle.addEventListener('pointermove',e=>{if(!drag||drag.pointerId!==e.pointerId)return;const br=board.getBoundingClientRect();draft.setAttribute('d',curve(drag.start,{x:e.clientX-br.left,y:e.clientY-br.top}));});handle.addEventListener('pointerup',e=>{if(!drag||drag.pointerId!==e.pointerId)return;const target=document.elementFromPoint(e.clientX,e.clientY)?.closest?.('.houseTarget');const card=drag.card;if(target&&!target.classList.contains('matched')&&target.dataset.id===card.dataset.id){card.classList.add('matched');target.classList.add('matched');matched++;feedback.textContent='✨ נכון!';stopDrag();redraw();if(matched===chosen.length){feedback.textContent='🎉 מצאתם את כל הבתים!';document.querySelector('#nextBtn')?.classList.remove('hidden');}}else{if(target){target.classList.add('wrong');setTimeout(()=>target.classList.remove('wrong'),450);feedback.textContent='🙂 נסו בית אחר';}stopDrag();}});handle.addEventListener('pointercancel',stopDrag);});window.addEventListener('resize',redraw,{once:true});
 }
 window.startHousePairs=start;
 const oldFetch=window.fetch;window.fetch=async(...args)=>{const r=await oldFetch(...args);try{if(String(args[0]).includes('/state'))window.__housePairsSnapshot=await r.clone().json()}catch{}return r};
-document.addEventListener('click',e=>{const b=e.target.closest?.('#gameModePicker [data-mode="house_pairs"]');if(!b)return;e.preventDefault();e.stopImmediatePropagation();start().catch(()=>{});},true);
+document.addEventListener('click',e=>{const mode=e.target.closest?.('#gameModePicker [data-mode="house_pairs"]');if(mode){e.preventDefault();e.stopImmediatePropagation();start().catch(()=>{});return;}const next=e.target.closest?.('#nextBtn');if(next&&localStorage.gameMode==='house_pairs'){e.preventDefault();e.stopImmediatePropagation();start().catch(()=>{});}},true);
 new MutationObserver(injectButton).observe(document.documentElement,{childList:true,subtree:true});injectButton();
 })();
