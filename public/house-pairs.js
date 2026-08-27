@@ -1,20 +1,29 @@
 (()=>{
 const HOUSE_NAMES=['אבי',"אפצ'י",'אפריים','אפרת','אילנית','אורן','אורים קטנים','סבתא שלומית','אורי'];
 const NIQQUD={
- 'אבי':{name:'פתח',mark:'ַ'},
- "אפצ'י":{name:'קמץ',mark:'ָ'},
- 'אפרת':{name:'צירה',mark:'ֵ'},
- 'אפריים':{name:'סגול',mark:'ֶ'},
- 'אילנית':{name:'חיריק',mark:'ִ'},
- 'אורים קטנים':{name:'קובוץ',mark:'ֻ'},
- 'אורי':{name:'שורוק',mark:'וּ'},
- 'סבתא שלומית':{name:'שווא',mark:'ְ'},
- 'אורן':{name:'חולם',mark:'ֹ'}
+ 'אבי':{name:'פתח',kind:'patah'},
+ "אפצ'י":{name:'קמץ',kind:'qamats'},
+ 'אפרת':{name:'צירה',kind:'tsere'},
+ 'אפריים':{name:'סגול',kind:'segol'},
+ 'אילנית':{name:'חיריק',kind:'hiriq'},
+ 'אורים קטנים':{name:'קובוץ',kind:'qubuts'},
+ 'אורי':{name:'שורוק',kind:'shuruk'},
+ 'סבתא שלומית':{name:'שווא',kind:'sheva'},
+ 'אורן':{name:'חולם',kind:'holam'}
 };
 const norm=s=>String(s||'').trim().replaceAll('׳',"'");
-// Render the Hebrew niqqud as a real font glyph over a dotted-circle anchor.
-// The dotted circle is transparent; it only gives combining marks a stable base.
-const houseSvg=name=>{const n=NIQQUD[norm(name)]||{name:'ניקוד',mark:'•'};return `<svg viewBox="0 0 180 150" role="img" aria-label="הבית של ${name}, ${n.name}"><path d="M12 63 L90 10 L168 63 L151 64 L151 140 L29 140 L29 64 Z" fill="#fffaf0" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/><path d="M12 63 L90 10 L168 63 Z" fill="#ff4b36" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/><rect x="76" y="101" width="28" height="39" rx="3" fill="#f6d08a" stroke="currentColor" stroke-width="5"/><text x="90" y="94" text-anchor="middle" class="houseNiqqud" aria-hidden="true"><tspan class="niqqudAnchor">◌</tspan>${n.mark}</text></svg>`};
+const niqqudSvg=kind=>({
+ patah:'<path d="M72 87 H108"/>',
+ qamats:'<path d="M72 84 H108 M90 84 V99"/>',
+ tsere:'<circle cx="80" cy="90" r="5"/><circle cx="100" cy="90" r="5"/>',
+ segol:'<circle cx="78" cy="85" r="5"/><circle cx="102" cy="85" r="5"/><circle cx="90" cy="100" r="5"/>',
+ hiriq:'<circle cx="90" cy="93" r="5"/>',
+ qubuts:'<circle cx="80" cy="80" r="4.5"/><circle cx="90" cy="90" r="4.5"/><circle cx="100" cy="100" r="4.5"/>',
+ shuruk:'<path d="M86 72 V101"/><circle cx="101" cy="86" r="5"/>',
+ sheva:'<circle cx="90" cy="84" r="5"/><circle cx="90" cy="100" r="5"/>',
+ holam:'<circle cx="90" cy="80" r="5"/>'
+}[kind]||'');
+const houseSvg=name=>{const n=NIQQUD[norm(name)]||{name:'ניקוד',kind:''};return `<svg viewBox="0 0 180 150" role="img" aria-label="הבית של ${name}, ${n.name}"><path d="M12 63 L90 10 L168 63 L151 64 L151 140 L29 140 L29 64 Z" fill="#fffaf0" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/><path d="M12 63 L90 10 L168 63 Z" fill="#ff4b36" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/><g class="houseNiqqudShape" fill="#20222a" stroke="#20222a" stroke-width="6" stroke-linecap="round">${niqqudSvg(n.kind)}</g><rect x="76" y="101" width="28" height="39" rx="3" fill="#f6d08a" stroke="currentColor" stroke-width="5"/></svg>`};
 function shuffle(a){return [...a].sort(()=>Math.random()-.5)}
 function markPickerSelected(){document.querySelectorAll('#gameModePicker button').forEach(x=>x.classList.toggle('selected',x.dataset.mode==='house_pairs'));}
 function injectButton(){const p=document.querySelector('#gameModePicker');if(!p||p.querySelector('[data-mode="house_pairs"]'))return;const b=document.createElement('button');b.type='button';b.dataset.mode='house_pairs';b.textContent='🏠 למי הבית?';p.appendChild(b);}
